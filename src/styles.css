@@ -26,3 +26,5 @@ textarea{width:100%;box-sizing:border-box;padding:10px;border:1px solid #d0d5dd;
 .productvisual{width:100%;height:105px;border-radius:12px;background:linear-gradient(145deg,#f8fafc,#e8eef6);display:grid;place-items:center;font-size:58px;margin-bottom:10px;border:1px solid #e4e7ec}.productcard small{color:#2563eb;font-weight:750;margin-top:5px}.productcard>button:first-child{justify-content:flex-start;text-align:left}
 
 .productvisual img{width:100%;height:100%;object-fit:contain;display:block;border-radius:10px}
+
+.mock .productbase{position:absolute;inset:8% 8% 12%;width:84%;height:80%;object-fit:contain;z-index:1}.mock .customerlogo{position:absolute;z-index:2}.mock .productname,.mock>small,.mock>span{position:relative;z-index:3}
