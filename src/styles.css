@@ -9,3 +9,6 @@
 .productcard{display:flex;flex-direction:column;gap:6px}.productcard>button:first-child{width:100%;height:100%}.dangerlink{background:transparent!important;color:#b42318!important;border:1px solid #fecdca!important;padding:7px!important}
 
 textarea{width:100%;box-sizing:border-box;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font:inherit;resize:vertical}
+
+/* MockuPro identity */
+.brand{gap:10px}.brandmark{display:inline-grid;place-items:center;width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,#16b8ff,#1768ff);color:#fff;font-weight:900;box-shadow:0 6px 18px rgba(22,104,255,.35)}.brand b{color:#27a8ff}.app aside>small{letter-spacing:1.2px;font-size:10px;color:#7f91a8}
