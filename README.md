@@ -1,26 +1,25 @@
 # Mockup Sales Platform
 
-SaaS multiempresa para vendedores de impresión, bordado, promocionales y personalización.
+Plataforma comercial multiempresa para crear mockups, cotizar y convertir propuestas aprobadas en pedidos.
 
-## Estado del prototipo
-Flujo funcional local: clientes → catálogo → carga y posicionamiento de logo → propuesta → cotización → aprobación → pedido → estados de producción.
+## Estado actual
+Frontend MVP en React + Vite. Persistencia local para demostración; todavía no usar datos sensibles ni credenciales reales.
 
-### Funciones actuales
-- Panel responsive
-- Catálogo base (textil, promocional, gran formato y papelería)
-- Carga PNG/JPG/SVG
-- Escala y posición X/Y del logo
-- Cantidad, descuento y total
-- Historial de propuestas
-- Aprobación de propuesta
-- Conversión a pedido
-- Estados: Nuevo, Producción, Listo, Entregado
-- Compartir por WhatsApp
-- Persistencia local de clientes, propuestas y pedidos
-- Arquitectura de datos multiempresa documentada
+## Flujo disponible
+1. Configurar datos de la empresa.
+2. Registrar clientes.
+3. Administrar catálogo y precios.
+4. Crear proyecto para un cliente.
+5. Cargar logo y seleccionar producto.
+6. Ajustar área, posición, tamaño, rotación y color.
+7. Guardar propuesta y exportar vista previa.
+8. Compartir por WhatsApp/correo.
+9. Cotizar e imprimir/guardar como PDF.
+10. Aprobar propuesta y convertirla en pedido.
+11. Mover pedido por Nuevo → Producción → Listo → Entregado.
 
-## Importante
-El mockup es una vista previa comercial y no un arte final listo para impresión.
+## Seguridad
+El repositorio no debe contener claves privadas. Antes de conectar backend real, activar autenticación, RLS y almacenamiento separado por tenant. El proyecto es independiente de ClickOnMe.
 
-## Pendiente para producción SaaS
-Autenticación, base de datos y almacenamiento multiempresa con RLS; fotos/plantillas reales; exportación PNG/PDF; aprobación pública del cliente; correo; arte final/preflight; auditoría; pruebas automatizadas; despliegue y suscripciones.
+## Próxima fase
+Validar build, publicar demo controlada, sustituir prompts por formularios comerciales y después conectar un backend multiempresa separado.
