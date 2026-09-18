@@ -48,3 +48,10 @@ textarea{width:100%;box-sizing:border-box;padding:10px;border:1px solid #d0d5dd;
 
 /* Approval guidance in client presentation */
 .presenthint{margin:0 0 12px;padding:10px 14px;border:1px solid #dbeafe;background:#eff6ff;border-radius:12px;color:#1e3a8a;font-size:13px;font-weight:700;text-align:center}
+
+/* Client decision workflow */
+.clientdecision{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 14px}
+.clientdecision button{margin:0;padding:12px 14px;font-weight:800}
+.clientdecision button:first-child{background:#15803d;color:#fff;border-color:#15803d}
+.clientdecision button:last-child{background:#fff7ed;color:#9a3412;border-color:#fdba74}
+@media(max-width:640px){.clientdecision{grid-template-columns:1fr}}
