@@ -1,6 +1,6 @@
 import React,{useState}from'react';
 import{Users,Shirt,Image as ImageIcon,FileText,ShoppingBag,Plus,Upload,Send}from'lucide-react';
-const demoProducts=[{id:1,name:'Playera clásica',category:'Textil',price:149,visual:'👕'},{id:2,name:'Taza 11 oz',category:'Promocional',price:89,visual:'☕'},{id:3,name:'Gorra',category:'Textil',price:129,visual:'🧢'},{id:4,name:'Lona personalizada',category:'Gran formato',price:180,visual:'▭'},{id:5,name:'Hoja membretada',category:'Papelería',price:4,visual:'📄'}];
+const demoProducts=[{id:1,name:'Playera clásica',category:'Textil',price:149,visual:'👕',image:'./products/tshirt.svg'},{id:2,name:'Taza 11 oz',category:'Promocional',price:89,visual:'☕',image:'./products/mug.svg'},{id:3,name:'Gorra',category:'Textil',price:129,visual:'🧢',image:'./products/cap.svg'},{id:4,name:'Lona personalizada',category:'Gran formato',price:180,visual:'▭',image:'./products/banner.svg'},{id:5,name:'Hoja membretada',category:'Papelería',price:4,visual:'📄',image:'./products/letterhead.svg'}];
 const modules=[['Clientes',Users],['Productos',Shirt],['Mockups',ImageIcon],['Cotizaciones',FileText],['Pedidos',ShoppingBag]];
 const load=(k,f)=>{try{return JSON.parse(localStorage.getItem(k))||f}catch{return f}};
 export default function App(){
