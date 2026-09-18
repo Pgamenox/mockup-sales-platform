@@ -55,3 +55,6 @@ textarea{width:100%;box-sizing:border-box;padding:10px;border:1px solid #d0d5dd;
 .clientdecision button:first-child{background:#15803d;color:#fff;border-color:#15803d}
 .clientdecision button:last-child{background:#fff7ed;color:#9a3412;border-color:#fdba74}
 @media(max-width:640px){.clientdecision{grid-template-columns:1fr}}
+
+/* Commercial client form */
+.clientform{display:grid;grid-template-columns:2fr 1fr 1.5fr auto;gap:10px;align-items:center;margin:12px 0 16px}.clientform input,.clientform button{margin:0}@media(max-width:850px){.clientform{grid-template-columns:1fr 1fr}.clientform button{width:100%}}@media(max-width:560px){.clientform{grid-template-columns:1fr}}
