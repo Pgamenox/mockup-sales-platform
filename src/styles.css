@@ -58,3 +58,6 @@ textarea{width:100%;box-sizing:border-box;padding:10px;border:1px solid #d0d5dd;
 
 /* Commercial client form */
 .clientform{display:grid;grid-template-columns:2fr 1fr 1.5fr auto;gap:10px;align-items:center;margin:12px 0 16px}.clientform input,.clientform button{margin:0}@media(max-width:850px){.clientform{grid-template-columns:1fr 1fr}.clientform button{width:100%}}@media(max-width:560px){.clientform{grid-template-columns:1fr}}
+
+/* Commercial catalog form */
+.productform{display:grid;grid-template-columns:1.5fr 1fr .7fr 1.7fr auto;gap:10px;align-items:center;margin:12px 0 18px;padding:14px;border:1px solid #e4e7ec;border-radius:14px;background:#f8fafc}.productform input,.productform button{margin:0}@media(max-width:1050px){.productform{grid-template-columns:1fr 1fr}.productform button{width:100%}}@media(max-width:600px){.productform{grid-template-columns:1fr}}
