@@ -23,3 +23,4 @@ El repositorio no debe contener claves privadas. Antes de conectar backend real,
 
 ## Próxima fase
 Validar build, publicar demo controlada, sustituir prompts por formularios comerciales y después conectar un backend multiempresa separado.
+
