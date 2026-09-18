@@ -45,3 +45,6 @@ textarea{width:100%;box-sizing:border-box;padding:10px;border:1px solid #d0d5dd;
 
 /* Client presentation sales actions */
 .presentactions{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px}.presentactions button{margin:0;flex:1;min-width:170px}.presentactions button:first-child{background:#16a34a;color:#fff;border-color:#16a34a}.presentactions button:last-child{background:#2563eb;color:#fff;border-color:#2563eb}
+
+/* Approval guidance in client presentation */
+.presenthint{margin:0 0 12px;padding:10px 14px;border:1px solid #dbeafe;background:#eff6ff;border-radius:12px;color:#1e3a8a;font-size:13px;font-weight:700;text-align:center}
