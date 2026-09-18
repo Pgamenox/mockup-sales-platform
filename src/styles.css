@@ -42,3 +42,6 @@ textarea{width:100%;box-sizing:border-box;padding:10px;border:1px solid #d0d5dd;
 
 /* Client presentation: hide production-only guides */
 .previewcard.presentation .printzone{display:none}
+
+/* Client presentation sales actions */
+.presentactions{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px}.presentactions button{margin:0;flex:1;min-width:170px}.presentactions button:first-child{background:#16a34a;color:#fff;border-color:#16a34a}.presentactions button:last-child{background:#2563eb;color:#fff;border-color:#2563eb}
