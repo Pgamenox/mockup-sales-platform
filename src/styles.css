@@ -12,3 +12,5 @@ textarea{width:100%;box-sizing:border-box;padding:10px;border:1px solid #d0d5dd;
 
 /* MockuPro identity */
 .brand{gap:10px}.brandmark{display:inline-grid;place-items:center;width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,#16b8ff,#1768ff);color:#fff;font-weight:900;box-shadow:0 6px 18px rgba(22,104,255,.35)}.brand b{color:#27a8ff}.app aside>small{letter-spacing:1.2px;font-size:10px;color:#7f91a8}
+
+.brandslogan{margin-top:4px;font-size:12px;color:#b8c5d6;font-weight:600}
