@@ -67,3 +67,11 @@ textarea{width:100%;box-sizing:border-box;padding:10px;border:1px solid #d0d5dd;
 .draggablelogo{cursor:grab;touch-action:none;user-select:none;-webkit-user-drag:none}.draggablelogo:active{cursor:grabbing}.dragtip{margin:10px 0;padding:10px 12px;border-radius:10px;background:#eef6ff;color:#175cd3;font-size:12px;font-weight:700}.mock{touch-action:none}
 /* Interactive customer-logo positioning */
 .customerlogo{cursor:grab;touch-action:none;user-select:none;-webkit-user-drag:none;z-index:4}.customerlogo.dragging{cursor:grabbing}.mock{touch-action:pan-y}
+
+/* Premium mockup depth: material, lighting and print integration */
+.mock{isolation:isolate;background:radial-gradient(circle at 50% 28%,rgba(255,255,255,.96),rgba(241,245,249,.92) 46%,rgba(226,232,240,.98) 100%)}
+.mock:after{content:'';position:absolute;inset:0;z-index:2;pointer-events:none;background:linear-gradient(112deg,rgba(255,255,255,.22) 8%,transparent 28%,rgba(15,23,42,.045) 54%,transparent 72%,rgba(255,255,255,.14) 90%);mix-blend-mode:soft-light}
+.mock .productbase{z-index:1;filter:drop-shadow(0 20px 18px rgba(15,23,42,.20)) contrast(1.025) saturate(.96)}
+.mock .customerlogo{z-index:3;filter:contrast(.96) saturate(.92) drop-shadow(0 1px 1px rgba(15,23,42,.16));mix-blend-mode:multiply;opacity:.96}
+.mock .customerlogo.dragging{opacity:.88;filter:drop-shadow(0 5px 7px rgba(15,23,42,.25));transition:none}
+.mock .productname,.mock>small,.mock>span{z-index:5}
