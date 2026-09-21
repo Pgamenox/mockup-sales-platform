@@ -113,3 +113,13 @@ input,select,textarea{border-radius:10px!important;border:1px solid #d7dee8!impo
 .notice{border-radius:12px!important;box-shadow:0 12px 30px rgba(15,23,42,.16)}
 .actions button,.filters button,.statusfilters button,.comparebtn{transition:.15s ease}.actions button:hover,.filters button:hover,.statusfilters button:hover,.comparebtn:hover{transform:translateY(-1px)}
 @media(max-width:800px){main>header{border-radius:14px}.card{border-radius:15px}.mock{border-radius:17px!important}}
+
+/* Premium editor workspace */
+.grid{align-items:start}.grid>.card:first-child{background:linear-gradient(180deg,#0c1727,#0a1422);color:#eaf2fb;border-color:#1d3045;box-shadow:0 18px 48px rgba(7,17,31,.22)}
+.grid>.card:first-child h2{color:#fff}.grid>.card:first-child label{color:#aebfd1;font-weight:700}.grid>.card:first-child input,.grid>.card:first-child select,.grid>.card:first-child textarea{background:#101f31!important;border-color:#29415a!important;color:#f7fbff!important}.grid>.card:first-child input[type=range]{accent-color:#1597ff}
+.grid>.card:first-child .drop{background:linear-gradient(145deg,#102338,#0d1c2e)!important;border:1px dashed #32628c!important;color:#d9ecff}.grid>.card:first-child .drop:hover{border-color:#1597ff!important;box-shadow:0 0 0 3px rgba(21,151,255,.09)}
+.grid>.card:first-child button{border-color:#29415a;background:#102238;color:#eaf2fb}.grid>.card:first-child button:hover{border-color:#1597ff}
+.grid>.card:nth-child(2){background:linear-gradient(180deg,#0b1522,#0c1827);border-color:#1c3045;color:#eaf2fb}.grid>.card:nth-child(2) h2{color:#fff}
+.mock{min-height:520px;background-color:#e9eef4!important;position:relative}.mock:before{content:"MOCKUPRO STUDIO";position:absolute;left:18px;top:16px;z-index:5;font-size:10px;font-weight:900;letter-spacing:.18em;color:#52667a;background:rgba(255,255,255,.74);padding:6px 9px;border-radius:7px;backdrop-filter:blur(8px)}
+.mockactions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.mockactions .comparebtn.selected{background:linear-gradient(135deg,#0b6fff,#1597ff)!important;color:#fff;border-color:transparent!important}
+@media(max-width:900px){.mock{min-height:430px}.mockactions{grid-template-columns:1fr}}
