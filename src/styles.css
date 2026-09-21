@@ -175,3 +175,16 @@ aside nav button{min-width:92px!important}
 
 .aiAccess{grid-column:1/-1;display:flex;gap:8px;align-items:center;padding-top:8px;border-top:1px solid rgba(148,163,184,.16)}.aiAccess input{min-width:220px}.aiAccess small{margin-right:auto}
 @media(max-width:800px){.aiAccess{flex-direction:column;align-items:stretch}.aiAccess input,.aiAccess button{width:100%}}
+
+
+/* Real-product workflow v2 */
+.productPhotoPreview{grid-column:1/-1;display:grid;grid-template-columns:112px 1fr;gap:13px;align-items:center;padding:12px;border:1px solid #d7e1ec;border-radius:14px;background:#fff}
+.productPhotoPreview img{width:112px;height:92px;object-fit:contain;border-radius:10px;background:radial-gradient(circle at 50% 34%,#fff,#eef3f7);border:1px solid #e2e8f0}
+.productPhotoPreview>div{display:flex;flex-direction:column;gap:4px}.productPhotoPreview small{color:#667085}.productPhotoPreview .qualityok,.productPhotoPreview .qualitywarn{width:max-content;padding:4px 7px;border-radius:999px;font-size:10px;font-weight:900;letter-spacing:.04em}.productPhotoPreview .qualityok{background:#ecfdf3;color:#027a48}.productPhotoPreview .qualitywarn{background:#fff4e5;color:#b54708}
+.productvisual{position:relative}.assetbadge{position:absolute;left:8px;top:8px;padding:4px 7px;border-radius:999px;font-size:9px;font-weight:900;letter-spacing:.08em;z-index:3;box-shadow:0 4px 12px rgba(15,23,42,.12)}.assetbadge.photo{background:#ecfdf3;color:#027a48}.assetbadge.template{background:#fff4e5;color:#b54708}
+.mock.asset-photo .productbase{width:94%;height:94%;object-fit:contain;filter:drop-shadow(0 24px 22px rgba(15,23,42,.24)) contrast(1.035) saturate(.97)}
+.mock.asset-photo .studio-light{background:radial-gradient(circle at 34% 18%,rgba(255,255,255,.30),transparent 32%),linear-gradient(112deg,transparent 33%,rgba(255,255,255,.08) 48%,transparent 64%);opacity:.9}
+.mock.asset-template .productbase{opacity:.86;filter:drop-shadow(0 15px 16px rgba(15,23,42,.17))}.mock.asset-template .realbadge{background:#b54708}
+.mock.surface-fabric.asset-photo .customerlogo{mix-blend-mode:multiply;filter:contrast(.94) saturate(.90) blur(.12px) drop-shadow(0 .6px .7px rgba(15,23,42,.16))}
+.mock.surface-ceramic.asset-photo .customerlogo{mix-blend-mode:multiply;filter:contrast(1) saturate(.96) drop-shadow(0 .35px .45px rgba(15,23,42,.10))}
+@media(max-width:800px){.productPhotoPreview{grid-template-columns:84px 1fr}.productPhotoPreview img{width:84px;height:76px}.assetbadge{left:6px;top:6px}}
