@@ -150,3 +150,20 @@ main .grid .card,.premiumCompany,.card{background:linear-gradient(145deg,#061522
 .pipeline{grid-template-columns:1fr 1fr!important;gap:9px!important}.pipeline>div,.pipeline>button{background:#091b2b!important;color:#f8fbff!important;border:1px solid #203e58!important;border-radius:13px!important}.pipeline span{color:#a9bbcc!important}.pulseaction small{color:#11aaff!important}
 .premiumCompany h2{display:flex;align-items:center;gap:9px}.premiumCompany h2 svg{color:#13a8ff}.premiumCompany input{background:#0a1d2d!important;border-color:#203e58!important;color:#fff!important}.premiumCompany button{background:#10263a!important;color:#fff!important;border-color:#284863!important}
 }
+
+/* Mobile header correction from device QA */
+@media(max-width:800px){
+.brandlogo{padding:18px 12px 12px!important;overflow:hidden}
+.brandmark{gap:2px!important;flex-wrap:nowrap!important;transform:none!important}
+.brandM{font-size:45px!important;letter-spacing:-8px!important;flex:0 0 auto}
+.brandBox{width:36px!important;height:36px!important;border-width:4px!important;font-size:23px!important;flex:0 0 36px}
+.brandName{font-size:31px!important;letter-spacing:-1.5px!important;white-space:nowrap}
+.brandBy{font-size:15px!important;margin-top:1px!important}
+.brandTag{margin-top:13px!important;font-size:11px!important;letter-spacing:.18em!important;white-space:nowrap}
+.brandlogo>small{font-size:11px!important}
+aside nav{justify-content:flex-start!important}
+aside nav button{min-width:92px!important}
+}
+@media(max-width:390px){
+.brandM{font-size:40px!important}.brandBox{width:32px!important;height:32px!important;flex-basis:32px}.brandName{font-size:27px!important}.brandBy{font-size:14px!important}.brandTag{font-size:10px!important;letter-spacing:.14em!important}
+}
