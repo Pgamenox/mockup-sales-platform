@@ -90,3 +90,5 @@ textarea{width:100%;box-sizing:border-box;padding:10px;border:1px solid #d0d5dd;
 .mock.view-catalogo{background:linear-gradient(145deg,#fff,#eef2f6);box-shadow:inset 0 0 0 10px rgba(255,255,255,.6),0 18px 40px rgba(15,23,42,.12)}
 .mock.view-cliente{background:radial-gradient(circle at 50% 18%,#fff 0,#edf4fb 55%,#dce8f5 100%);border-color:#c9daed}
 .mock.view-cliente .productname{font-size:15px;color:#101828}.mock.view-cliente .realbadge{background:#0b6fff}
+
+.photoUpload{display:flex!important;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:8px 12px;border:1px dashed #98a2b3;border-radius:10px;cursor:pointer;background:#f8fafc;font-weight:700}.photoUpload:hover{border-color:#1597ff;background:#eff8ff}.photoUpload input{display:none}.productvisual img{object-fit:contain}
