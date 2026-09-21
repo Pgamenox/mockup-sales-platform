@@ -75,3 +75,12 @@ textarea{width:100%;box-sizing:border-box;padding:10px;border:1px solid #d0d5dd;
 .mock .customerlogo{z-index:3;filter:contrast(.96) saturate(.92) drop-shadow(0 1px 1px rgba(15,23,42,.16));mix-blend-mode:multiply;opacity:.96}
 .mock .customerlogo.dragging{opacity:.88;filter:drop-shadow(0 5px 7px rgba(15,23,42,.25));transition:none}
 .mock .productname,.mock>small,.mock>span{z-index:5}
+
+/* Material-aware rendering */
+.mock .studio-light{position:absolute;inset:0;z-index:2;pointer-events:none;background:radial-gradient(circle at 34% 18%,rgba(255,255,255,.34),transparent 35%),linear-gradient(105deg,transparent 35%,rgba(255,255,255,.10) 48%,transparent 62%);mix-blend-mode:soft-light}
+.mock.surface-fabric .productbase{filter:drop-shadow(0 22px 18px rgba(15,23,42,.22)) contrast(1.035) saturate(.94)}
+.mock.surface-fabric .customerlogo{filter:contrast(.94) saturate(.90) blur(.08px) drop-shadow(0 .7px .8px rgba(15,23,42,.18))}
+.mock.surface-ceramic .productbase{filter:drop-shadow(0 20px 16px rgba(15,23,42,.20)) contrast(1.04)}
+.mock.surface-ceramic .customerlogo{filter:contrast(1.01) saturate(.96) drop-shadow(0 .4px .5px rgba(15,23,42,.12))}
+.mock.surface-paper .customerlogo,.mock.surface-matte .customerlogo{filter:contrast(.97) saturate(.92)}
+.mock.surface-paper .studio-light{opacity:.35}.mock.surface-ceramic .studio-light{opacity:1.2}
