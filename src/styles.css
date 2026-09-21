@@ -94,3 +94,22 @@ textarea{width:100%;box-sizing:border-box;padding:10px;border:1px solid #d0d5dd;
 .photoUpload{display:flex!important;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:8px 12px;border:1px dashed #98a2b3;border-radius:10px;cursor:pointer;background:#f8fafc;font-weight:700}.photoUpload:hover{border-color:#1597ff;background:#eff8ff}.photoUpload input{display:none}.productvisual img{object-fit:contain}
 
 .comparebtn{margin-top:10px;width:100%;border:1px solid #cfd8e3;background:#fff;border-radius:10px;padding:10px;font-weight:800;cursor:pointer}.comparepanel{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}.comparepanel>div{position:relative;min-height:180px;overflow:hidden;border:1px solid #dbe2ea;border-radius:12px;background:#f5f7fa;display:flex;align-items:center;justify-content:center}.comparepanel b{position:absolute;z-index:4;top:8px;left:8px;background:rgba(7,17,31,.84);color:#fff;padding:5px 7px;border-radius:6px;font-size:10px}.comparepanel img:not(.comparelogo){width:92%;height:92%;object-fit:contain}.comparepanel .comparelogo{position:absolute;z-index:3;max-height:45%;object-fit:contain}@media(max-width:640px){.comparepanel{grid-template-columns:1fr}.comparepanel>div{min-height:220px}}
+
+/* Premium UI pass */
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#101828;background:#eef2f6}
+body{background:radial-gradient(circle at 72% -10%,#dcecff 0,transparent 28%),linear-gradient(180deg,#f7f9fc 0,#eef2f6 100%)}
+.app aside{background:linear-gradient(180deg,#07111f 0,#0a1728 62%,#07111f 100%);box-shadow:14px 0 42px rgba(7,17,31,.14);border-right:1px solid rgba(255,255,255,.06)}
+.brandlogo{padding:22px 18px 26px}.brandlogo img{max-width:170px;filter:drop-shadow(0 7px 18px rgba(0,132,255,.18))}
+aside nav button{border:1px solid transparent;border-radius:12px;transition:.18s ease}aside nav button:hover{background:rgba(255,255,255,.07);transform:translateX(2px)}aside nav button:focus-visible{outline:2px solid #1597ff;outline-offset:2px}
+main>header{background:rgba(255,255,255,.82);backdrop-filter:blur(16px);border:1px solid rgba(208,217,228,.85);border-radius:18px;padding:17px 20px;box-shadow:0 10px 30px rgba(15,23,42,.06);margin-bottom:18px}
+main>header h1{letter-spacing:-.035em}
+.card{border:1px solid rgba(211,220,230,.9);border-radius:18px;background:rgba(255,255,255,.94);box-shadow:0 12px 34px rgba(15,23,42,.07);transition:box-shadow .2s ease,transform .2s ease}.card:hover{box-shadow:0 16px 42px rgba(15,23,42,.09)}
+.card h2{letter-spacing:-.025em}
+.primary{background:linear-gradient(135deg,#0b6fff,#1597ff)!important;border:none!important;box-shadow:0 8px 20px rgba(11,111,255,.23);font-weight:800}.primary:hover{transform:translateY(-1px);box-shadow:0 11px 24px rgba(11,111,255,.3)}
+input,select,textarea{border-radius:10px!important;border:1px solid #d7dee8!important;background:#fbfcfe!important;transition:border-color .15s,box-shadow .15s}input:focus,select:focus,textarea:focus{outline:none;border-color:#1597ff!important;box-shadow:0 0 0 3px rgba(21,151,255,.12)}
+.productcard{border-radius:16px!important;overflow:hidden;box-shadow:0 7px 20px rgba(15,23,42,.06);transition:.2s ease}.productcard:hover{transform:translateY(-3px);box-shadow:0 14px 28px rgba(15,23,42,.11)}
+.mock{border-radius:22px!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.7),0 22px 55px rgba(15,23,42,.14)!important}
+.realbadge{letter-spacing:.08em;font-weight:900!important;box-shadow:0 5px 14px rgba(11,111,255,.18)}
+.notice{border-radius:12px!important;box-shadow:0 12px 30px rgba(15,23,42,.16)}
+.actions button,.filters button,.statusfilters button,.comparebtn{transition:.15s ease}.actions button:hover,.filters button:hover,.statusfilters button:hover,.comparebtn:hover{transform:translateY(-1px)}
+@media(max-width:800px){main>header{border-radius:14px}.card{border-radius:15px}.mock{border-radius:17px!important}}
