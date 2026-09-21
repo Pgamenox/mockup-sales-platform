@@ -167,3 +167,8 @@ aside nav button{min-width:92px!important}
 @media(max-width:390px){
 .brandM{font-size:40px!important}.brandBox{width:32px!important;height:32px!important;flex-basis:32px}.brandName{font-size:27px!important}.brandBy{font-size:14px!important}.brandTag{font-size:10px!important;letter-spacing:.14em!important}
 }
+
+/* AI product preparation */
+.aiProduct{grid-column:1/-1;display:grid;grid-template-columns:1.5fr .9fr auto auto;gap:9px;align-items:center;padding:13px;border-radius:14px;border:1px solid rgba(255,196,0,.28);background:linear-gradient(135deg,rgba(255,196,0,.08),rgba(11,111,255,.08))}
+.aiProduct>div:first-child{display:flex;flex-direction:column;gap:3px}.aiProduct b{color:#f5b900}.aiProduct small{color:#667085;line-height:1.3}.aiButton{background:linear-gradient(135deg,#f4b400,#ffd83d)!important;color:#07111f!important;border:none!important;font-weight:900!important;box-shadow:0 7px 18px rgba(244,180,0,.18)}.aiButton:disabled{opacity:.45;box-shadow:none}
+@media(max-width:800px){.aiProduct{grid-template-columns:1fr!important}.aiProduct small{color:#a9bbcc}.aiProduct select,.aiProduct button{width:100%}}
