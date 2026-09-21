@@ -188,3 +188,9 @@ aside nav button{min-width:92px!important}
 .mock.surface-fabric.asset-photo .customerlogo{mix-blend-mode:multiply;filter:contrast(.94) saturate(.90) blur(.12px) drop-shadow(0 .6px .7px rgba(15,23,42,.16))}
 .mock.surface-ceramic.asset-photo .customerlogo{mix-blend-mode:multiply;filter:contrast(1) saturate(.96) drop-shadow(0 .35px .45px rgba(15,23,42,.10))}
 @media(max-width:800px){.productPhotoPreview{grid-template-columns:84px 1fr}.productPhotoPreview img{width:84px;height:76px}.assetbadge{left:6px;top:6px}}
+
+
+/* Catalog photo maintenance */
+.productCardActions{display:grid;grid-template-columns:1fr auto;gap:7px;align-items:stretch}.productCardActions button{margin:0!important;min-height:38px!important}
+.replacePhotoBtn{display:flex;align-items:center;justify-content:center;min-height:38px;padding:7px 10px;border:1px solid #bfd3e8;border-radius:9px;background:#eef7ff;color:#175cd3;font-size:12px;font-weight:850;cursor:pointer}.replacePhotoBtn:hover{border-color:#1597ff;background:#e3f2ff}.replacePhotoBtn input{display:none}
+@media(max-width:560px){.productCardActions{grid-template-columns:1fr 1fr}}
