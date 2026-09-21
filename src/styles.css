@@ -167,3 +167,12 @@ aside nav button{min-width:92px!important}
 @media(max-width:390px){
 .brandM{font-size:40px!important}.brandBox{width:32px!important;height:32px!important;flex-basis:32px}.brandName{font-size:27px!important}.brandBy{font-size:14px!important}.brandTag{font-size:10px!important;letter-spacing:.14em!important}
 }
+
+.mobileWelcome{display:none}
+@media(max-width:800px){
+.mobileWelcome{display:flex;position:relative;overflow:hidden;align-items:center;justify-content:space-between;min-height:150px;margin:0 0 12px;padding:20px;border:1px solid #23435e;border-radius:15px;background:radial-gradient(circle at 82% 38%,rgba(0,132,255,.35),transparent 30%),linear-gradient(135deg,#061522,#08243a);box-shadow:0 13px 30px rgba(0,0,0,.28)}
+.mobileWelcome:after{content:"";position:absolute;right:-40px;top:-45px;width:180px;height:180px;border:1px solid rgba(15,164,255,.2);border-radius:50%}
+.mobileWelcome>div:first-child{position:relative;z-index:2;max-width:61%}.mobileWelcome small{color:#ffc400!important;font-size:16px;font-weight:900}.mobileWelcome h2{margin:4px 0 8px;color:#fff;font-size:25px;line-height:1;letter-spacing:-.035em}.mobileWelcome p{margin:0;color:#b8cadb;font-size:14px;line-height:1.35}
+.welcomeProducts{position:relative;z-index:2;width:35%;height:105px;display:flex;align-items:flex-end;justify-content:center;gap:2px;color:#fff}.welcomeProducts svg{width:72px;height:72px;stroke-width:1.2;filter:drop-shadow(0 10px 10px rgba(0,0,0,.35))}.welcomeProducts span{font-size:31px;filter:drop-shadow(0 8px 8px rgba(0,0,0,.35));margin-left:-16px}
+.premiumHero{min-height:auto!important;padding:17px!important}.premiumHero small{font-size:12px!important}.premiumHero h2{font-size:24px!important;max-width:100%!important}.premiumHero p{font-size:14px!important;max-width:100%!important}.heroActions{margin-top:13px!important}
+}
