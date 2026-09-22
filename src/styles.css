@@ -194,3 +194,6 @@ aside nav button{min-width:92px!important}
 .productCardActions{display:grid;grid-template-columns:1fr auto;gap:7px;align-items:stretch}.productCardActions button{margin:0!important;min-height:38px!important}
 .replacePhotoBtn{display:flex;align-items:center;justify-content:center;min-height:38px;padding:7px 10px;border:1px solid #bfd3e8;border-radius:9px;background:#eef7ff;color:#175cd3;font-size:12px;font-weight:850;cursor:pointer}.replacePhotoBtn:hover{border-color:#1597ff;background:#e3f2ff}.replacePhotoBtn input{display:none}
 @media(max-width:560px){.productCardActions{grid-template-columns:1fr 1fr}}
+
+.catalogSync{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}.catalogSync h2{margin:0}.catalogSync span{font-size:12px;font-weight:800;padding:7px 10px;border-radius:999px;border:1px solid rgba(148,163,184,.18)}.syncOk{color:#0f9d58;background:rgba(15,157,88,.08)}.syncBusy{color:#2563eb;background:rgba(37,99,235,.08)}.syncLocal{color:#64748b;background:rgba(100,116,139,.08)}.cloudError{display:block;color:#b42318;margin:-2px 0 10px}
+@media(max-width:700px){.catalogSync{align-items:flex-start;flex-direction:column}.catalogSync span{width:100%;text-align:center}}
