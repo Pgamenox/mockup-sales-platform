@@ -54,3 +54,20 @@ Ronda 1: APROBADA CON PENDIENTES. El flujo lógico está más protegido, pero no
 
 ### Pendiente de prueba operativa real
 El proyecto Supabase aún no tiene usuarios reales registrados, por lo que falta ejecutar una prueba autenticada extremo a extremo con dos roles reales (vendedor y producción) y un proveedor real/de prueba. Esta prueba no se cuenta como aprobada hasta realizarse con sesiones auténticas.
+
+
+## 2026-09-23 — Catálogos PDF compartidos
+### Implementado
+- Carga de catálogo PDF a almacenamiento privado por tenant.
+- Indexación del texto de todas las páginas.
+- Miniatura WEBP por página para visualización y futura extracción de producto.
+- Buscador compartido por empresa.
+- Apertura del PDF en la página encontrada mediante URL firmada temporal.
+- Reemplazo seguro por marca: la versión anterior se archiva sólo después de finalizar correctamente la nueva.
+- Archivo y eliminación administrativa.
+- Vendedores con acceso de lectura/búsqueda; administrador/encargado de catálogos con permisos de mantenimiento.
+
+### Pendiente de siguiente fase
+- Detección automática de fichas de producto dentro de cada página.
+- Separación de imagen de producto, modelo/SKU/ID y asociación con plantilla de mockup.
+- Revisión humana de resultados con baja confianza antes de publicar una ficha de producto.
