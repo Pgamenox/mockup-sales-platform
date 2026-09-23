@@ -13,6 +13,9 @@
 - Compartir texto por WhatsApp
 
 ## Próxima fase
+- Catálogos PDF multi-marca: subir varios catálogos por empresa, extraer productos y habilitar buscador por marca, modelo, número de modelo/ID, SKU, categoría y palabras clave
+- Índice de catálogo independiente del tipo de producto: ropa, gorras, tazas, plumas, llaveros, termos, bolsas, papelería y otros promocionales
+- Ficha de producto vinculada a catálogo, página fuente e imagen/plantilla de mockup
 - Persistencia real y autenticación
 - Aislamiento multiempresa
 - Fotos/plantillas reales de productos y áreas imprimibles
