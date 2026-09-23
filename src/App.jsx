@@ -1,10 +1,9 @@
 import React,{useEffect,useState}from'react';
-import{createClient}from'@supabase/supabase-js';
+import{supabase}from'./supabaseClient';
 import{getDocument,GlobalWorkerOptions}from'pdfjs-dist';
 import pdfWorker from'pdfjs-dist/build/pdf.worker.min.mjs?url';
 GlobalWorkerOptions.workerSrc=pdfWorker;
 import{Users,Shirt,Image as ImageIcon,FileText,ShoppingBag,Plus,Upload,Send,Home,BarChart3,Building2,ShieldCheck,Factory}from'lucide-react';
-const supabase=createClient('https://dsgyioqbatvwhxugumoa.supabase.co','sb_publishable_dAbY9OY5BO80M9V4rEuVtQ_FZJ3l1AH');
 const demoProducts=[{id:1,name:'Playera clásica',category:'Textil',price:149,visual:'👕',image:'./products/tshirt.webp',surface:'fabric'},{id:2,name:'Taza 11 oz',category:'Promocional',price:89,visual:'☕',image:'./products/mug.webp',surface:'ceramic'},{id:3,name:'Gorra',category:'Textil',price:129,visual:'🧢',image:'./products/cap.webp',surface:'fabric'},{id:4,name:'Lona personalizada',category:'Gran formato',price:180,visual:'▭',image:'./products/banner.svg',surface:'matte'},{id:5,name:'Hoja membretada',category:'Papelería',price:4,visual:'📄',image:'./products/letterhead.svg',surface:'paper'}];
 const modules=[['Clientes',Users],['Productos',Shirt],['Catálogos',FileText],['Mockups',ImageIcon],['Cotizaciones',FileText],['Pedidos',ShoppingBag],['Producción',Factory],['Admin',ShieldCheck]];
 const load=(k,f)=>{try{return JSON.parse(localStorage.getItem(k))||f}catch{return f}};
