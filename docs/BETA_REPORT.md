@@ -32,3 +32,25 @@ Auditoría estática del flujo comercial y simulación lógica de operaciones re
 
 ## Resultado
 Ronda 1: APROBADA CON PENDIENTES. El flujo lógico está más protegido, pero no se considera listo para producción ni para datos reales.
+
+
+## 2026-09-23 — Flujo de aprobación y producción
+### Implementado
+- Aprobación de cotización transaccional en Supabase.
+- Pedido, partida y trabajo de producción creados sin duplicados por la misma cotización.
+- Módulo Producción conectado con proveedores y órdenes de compra.
+- Alta rápida de proveedor para administración/producción.
+- Orden a proveedor con folio, referencia, costo opcional y fecha esperada.
+- Estados de recepción: Solicitado, Confirmado, Parcial y Recibido.
+- Flujo productivo: Pendiente, Revisión, Esperando proveedor, Material recibido, En producción, Control calidad, Listo y Entregado.
+- Sincronización del estado real del pedido hacia el módulo Pedidos.
+- Vendedor consulta sus pedidos reales; administración/producción controlan el avance.
+- Permisos de tablas y RPC endurecidos: anon sin acceso al flujo empresarial.
+
+### Verificado
+- RLS habilitado en tablas del flujo empresarial.
+- Advisors de seguridad ejecutados después de cambios.
+- Compilación CI se usa como requisito antes de considerar desplegada la versión.
+
+### Pendiente de prueba operativa real
+El proyecto Supabase aún no tiene usuarios reales registrados, por lo que falta ejecutar una prueba autenticada extremo a extremo con dos roles reales (vendedor y producción) y un proveedor real/de prueba. Esta prueba no se cuenta como aprobada hasta realizarse con sesiones auténticas.
