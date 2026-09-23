@@ -83,3 +83,19 @@ Cuando una venta es aprobada, llega al mismo departamento de producción, que pu
 
 ## Regla operativa
 MockuPro no debe usar una cuenta compartida por empresa. Cada persona usa su propio acceso y su rol determina lo que puede ver o modificar.
+
+
+## Estado implementado — flujo producción/proveedor
+La versión actual conecta:
+1. Aprobación de cotización.
+2. Creación de pedido y partidas.
+3. Creación automática de trabajo en Producción.
+4. Revisión del pedido.
+5. Selección/alta de proveedor.
+6. Generación idempotente de orden de compra al proveedor.
+7. Estados de proveedor: Solicitado → Confirmado/Parcial → Recibido.
+8. Al recibir todo el material, el trabajo pasa a Material recibido.
+9. Producción avanza: En producción → Control calidad → Listo → Entregado.
+10. El estado del pedido se sincroniza para que el vendedor vea Producción, Listo o Entregado.
+
+Los costos de proveedor permanecen restringidos a Administración/Producción mediante RLS.
