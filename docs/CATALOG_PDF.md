@@ -43,3 +43,15 @@ El módulo no debe asumir categorías fijas. Debe aceptar textiles, gorras, taza
 
 ## Regla de origen
 Una ficha importada conserva siempre el catálogo y página de donde salió. La información del PDF sirve para localizar y cotizar el producto; la plantilla de mockup se administra por separado.
+
+
+## Implementado — biblioteca compartida en nube
+- Los PDFs se almacenan en el bucket privado `catalog-pdfs`, separados por empresa.
+- Cada página se indexa en `catalog_pages`.
+- Cada página genera una miniatura WEBP privada en `catalog-images`.
+- Todos los miembros de la empresa pueden consultar catálogos activos.
+- Sólo `tenant_admin` y `catalog_manager` pueden subir, reemplazar, archivar o eliminar.
+- La nueva versión de una marca se procesa primero y sólo al finalizar correctamente pasa a `active`.
+- Al activarse una nueva versión, la versión activa anterior de esa marca pasa a `archived`.
+- El buscador compartido consulta marca, nombre y texto de página y abre el PDF directamente en la página encontrada.
+- Las miniaturas de página quedan como base visual para la siguiente fase de detección/recorte de productos.
