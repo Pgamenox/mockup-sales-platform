@@ -8,8 +8,10 @@ const checks = [
   ['acceso autenticado', auth.includes('signInWithPassword') && auth.includes('signUp')],
   ['aislamiento por empresa', app.includes("from('tenant_members')") && app.includes("eq('tenant_id',tid)")],
   ['catálogo administrable', app.includes('addProduct') && app.includes('deleteProduct') && app.includes('replaceProductPhoto')],
-  ['flujo comercial', app.includes('approveAndOrder') && app.includes('production_jobs')],
-  ['persistencia real', app.includes("from('products')") && app.includes("from('orders')")],
+  ['flujo comercial', app.includes('approveAndOrder') && app.includes("rpc('approve_quote_to_production'") && app.includes('production_jobs')],
+  ['clientes compartidos', app.includes("from('customers').insert") && app.includes("from('customers').select") && app.includes("from('customers').delete")],
+  ['cotizaciones compartidas', app.includes("from('quotes').insert") && app.includes("from('quotes').select") && app.includes("from('quotes').update")],
+  ['persistencia real', app.includes("from('products')") && app.includes("from('customers')") && app.includes("from('quotes')") && app.includes("from('orders')")],
   ['catálogos compartidos', app.includes("from('catalogs')") && app.includes("from('catalog_pages')")],
   ['credencial sólo publicable', client.includes('sb_publishable_') && !client.includes('service_role')],
 ];
