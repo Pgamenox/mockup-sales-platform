@@ -229,7 +229,9 @@ aside nav button{min-width:92px!important}
 
 
 /* Shared cloud PDF catalog library */
+.role-salesperson .productform,.role-salesperson .productCardActions,.role-designer .productform,.role-designer .productCardActions,.role-production .productform,.role-production .productCardActions{display:none}
 .catalogCloudNote{display:flex;justify-content:space-between;align-items:center;gap:14px;margin:15px 0;padding:11px 13px;border:1px solid #cfe1f4;border-radius:12px;background:#f4f9ff}.catalogCloudNote b{color:#175cd3}.catalogCloudNote span{color:#475467;font-size:13px}
 .catalogRow.archived{opacity:.7}.catalogRow.archived>div:first-child b:after{content:" · histórico";font-weight:600;color:#98a2b3}.catalogRow.processing{border-style:dashed}.catalogRow.error{border-color:#fecdca;background:#fff6f5}
 .catalogHitVisual{grid-template-columns:88px 1fr!important;gap:12px!important}.catalogHitVisual>img{width:88px;height:112px;object-fit:cover;border-radius:8px;border:1px solid #dbe5ef;background:#fff}.catalogHitCopy{min-width:0}.catalogHitCopy>div{display:flex;justify-content:space-between;gap:10px}.catalogHitCopy p{margin:7px 0;color:#475467;line-height:1.45}.catalogHitCopy small{color:#0b6fff;font-weight:800}
 @media(max-width:800px){.catalogCloudNote{align-items:flex-start;flex-direction:column}.catalogHitVisual{grid-template-columns:68px 1fr!important}.catalogHitVisual>img{width:68px;height:88px}.catalogHitCopy>div{flex-direction:column;gap:3px}.catalogCloudNote{background:#0a1d2d!important;border-color:#203e58!important}.catalogCloudNote span,.catalogHitCopy p{color:#a9bbcc!important}.catalogCloudNote b{color:#7dc4ff!important}}
+
