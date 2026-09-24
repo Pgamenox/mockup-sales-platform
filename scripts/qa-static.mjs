@@ -8,6 +8,8 @@ const checks = [
   ['acceso autenticado', auth.includes('signInWithPassword') && auth.includes('signUp')],
   ['aislamiento por empresa', app.includes("from('tenant_members')") && app.includes("eq('tenant_id',tid)")],
   ['catálogo administrable', app.includes('addProduct') && app.includes('deleteProduct') && app.includes('replaceProductPhoto')],
+  ['navegación por rol', app.includes('roleModules') && app.includes('visibleModules.map') && app.includes("active!=='Inicio'")],
+  ['edición de producto por rol', app.includes('canManageProducts') && app.includes("currentRole==='catalog_manager'")],
   ['flujo comercial', app.includes('approveAndOrder') && app.includes("rpc('approve_quote_to_production'") && app.includes('production_jobs')],
   ['clientes compartidos', app.includes("from('customers').insert") && app.includes("from('customers').select") && app.includes("from('customers').delete")],
   ['cotizaciones compartidas', app.includes("from('quotes').insert") && app.includes("from('quotes').select") && app.includes("from('quotes').update")],
@@ -22,3 +24,4 @@ for (const [name, ok] of checks) {
   failed ||= !ok;
 }
 if (failed) process.exit(1);
+
