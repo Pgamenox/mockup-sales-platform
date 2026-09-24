@@ -2789,7 +2789,295 @@ export default function App() {
                               className="primary"
                               disabled={productionBusy === j.id}
                               onClick={() =>
-                                advanceProductio…2831 tokens truncated…                       type="email"
+                                advanceProduction(j, "En producción")
+                              }
+                            >
+                              Iniciar producción
+                            </button>
+                          )}
+                          {j.status === "En producción" && (
+                            <button
+                              className="primary"
+                              disabled={productionBusy === j.id}
+                              onClick={() =>
+                                advanceProduction(j, "Control calidad")
+                              }
+                            >
+                              Enviar a control de calidad
+                            </button>
+                          )}
+                          {j.status === "Control calidad" && (
+                            <>
+                              <button
+                                disabled={productionBusy === j.id}
+                                onClick={() =>
+                                  advanceProduction(j, "En producción")
+                                }
+                              >
+                                Regresar a producción
+                              </button>
+                              <button
+                                className="primary"
+                                disabled={productionBusy === j.id}
+                                onClick={() => advanceProduction(j, "Listo")}
+                              >
+                                Marcar listo
+                              </button>
+                            </>
+                          )}
+                          {j.status === "Listo" && (
+                            <button
+                              className="primary"
+                              disabled={productionBusy === j.id}
+                              onClick={() => advanceProduction(j, "Entregado")}
+                            >
+                              Confirmar entrega
+                            </button>
+                          )}
+                          {j.status === "Detenido" && (
+                            <button
+                              disabled={productionBusy === j.id}
+                              onClick={() => advanceProduction(j, "Revisión")}
+                            >
+                              Reabrir revisión
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {!canManageProduction && (
+                        <div className="sellerProgress">
+                          <span>Seguimiento del pedido</span>
+                          <b>{j.status}</b>
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
+        {active === "Clientes" && (
+          <section className="card">
+            <h2>Clientes</h2>
+            {canManageClients && (
+              <div className="clientform">
+                <input
+                  placeholder="Nombre o empresa *"
+                  value={clientForm.name}
+                  onChange={(e) =>
+                    setClientForm({ ...clientForm, name: e.target.value })
+                  }
+                />
+                <input
+                  placeholder="WhatsApp o teléfono"
+                  value={clientForm.phone}
+                  onChange={(e) =>
+                    setClientForm({ ...clientForm, phone: e.target.value })
+                  }
+                />
+                <input
+                  type="email"
+                  placeholder="Correo"
+                  value={clientForm.email}
+                  onChange={(e) =>
+                    setClientForm({ ...clientForm, email: e.target.value })
+                  }
+                />
+                <button className="primary" onClick={addClient}>
+                  Guardar cliente
+                </button>
+              </div>
+            )}
+            <input
+              className="search"
+              placeholder="Buscar cliente"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <div className="simplelist">
+              {filteredClients.map((c) => (
+                <div className="row" key={c.id}>
+                  <div>
+                    <b>{c.name}</b>
+                    <small>
+                      {[c.phone, c.email].filter(Boolean).join(" · ") ||
+                        "Sin datos de contacto"}
+                    </small>
+                  </div>
+                  <div className="actions">
+                    <button
+                      onClick={() => {
+                        setSelectedClient(String(c.id));
+                        setActive("Mockups");
+                      }}
+                    >
+                      Nuevo proyecto
+                    </button>
+                    {canManageClients && (
+                      <button onClick={() => deleteClient(c.id)}>
+                        Eliminar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+        {active === "Productos" && (
+          <section className="card">
+            <div className="catalogSync">
+              <h2>Catálogo</h2>
+              <span
+                className={
+                  cloudReady ? "syncOk" : cloudBusy ? "syncBusy" : "syncLocal"
+                }
+              >
+                {session
+                  ? cloudBusy
+                    ? "☁ Sincronizando…"
+                    : cloudReady
+                      ? "☁ Catálogo sincronizado"
+                      : "☁ Conectando…"
+                  : "◌ Modo local"}
+              </span>
+            </div>
+            {cloudError && <small className="cloudError">{cloudError}</small>}
+            {canManageProducts ? (
+              <div className="productform">
+                <input
+                  placeholder="Nombre del producto *"
+                  value={productForm.name}
+                  onChange={(e) =>
+                    setProductForm({ ...productForm, name: e.target.value })
+                  }
+                />
+                <input
+                  placeholder="Categoría"
+                  value={productForm.category}
+                  onChange={(e) =>
+                    setProductForm({ ...productForm, category: e.target.value })
+                  }
+                />
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Precio base *"
+                  value={productForm.price}
+                  onChange={(e) =>
+                    setProductForm({ ...productForm, price: e.target.value })
+                  }
+                />
+                <input
+                  placeholder="URL de imagen/template (opcional)"
+                  value={
+                    productForm.image.startsWith("data:")
+                      ? "Foto cargada"
+                      : productForm.image
+                  }
+                  onChange={(e) =>
+                    setProductForm({ ...productForm, image: e.target.value })
+                  }
+                />
+                <label className="photoUpload">
+                  <Upload size={16} /> Subir foto real
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={uploadProductPhoto}
+                  />
+                </label>
+                {productForm.image && (
+                  <div className="productPhotoPreview">
+                    <img
+                      src={productForm.image}
+                      alt="Vista previa del producto"
+                    />
+                    <div>
+                      <b>Foto del producto</b>
+                      <small>
+                        {productPhotoMeta
+                          ? productPhotoMeta.width +
+                            " × " +
+                            productPhotoMeta.height +
+                            " px · " +
+                            Math.round(productPhotoMeta.bytes / 1024) +
+                            " KB"
+                          : "Revisa encuadre y fondo antes de guardar"}
+                      </small>
+                      <span
+                        className={
+                          productPhotoMeta &&
+                          (productPhotoMeta.width < 900 ||
+                            productPhotoMeta.height < 900)
+                            ? "qualitywarn"
+                            : "qualityok"
+                        }
+                      >
+                        {productPhotoMeta &&
+                        (productPhotoMeta.width < 900 ||
+                          productPhotoMeta.height < 900)
+                          ? "Resolución aceptable, pero no ideal"
+                          : "Lista para catálogo"}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                <div className="aiProduct">
+                  <div>
+                    <b>✨ Preparar con IA</b>
+                    <small>
+                      Limpia el fondo y convierte tu foto en imagen de catálogo
+                      sin alterar el producto.
+                    </small>
+                  </div>
+                  <select
+                    value={aiPreset}
+                    onChange={(e) => setAiPreset(e.target.value)}
+                  >
+                    <option value="studio">Estudio premium oscuro</option>
+                    <option value="white">Catálogo blanco</option>
+                    <option value="transparent">Fondo transparente</option>
+                  </select>
+                  <button
+                    type="button"
+                    className="aiButton"
+                    disabled={
+                      aiBusy || !productForm.image?.startsWith("data:image/")
+                    }
+                    onClick={prepareProductAI}
+                  >
+                    {aiBusy ? "Procesando…" : "Preparar foto con IA"}
+                  </button>
+                  {aiOriginal && productForm.image !== aiOriginal && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setProductForm((v) => ({ ...v, image: aiOriginal }))
+                      }
+                    >
+                      Usar foto original
+                    </button>
+                  )}
+                  <div className="aiAccess">
+                    {session ? (
+                      <>
+                        <small>
+                          Sesión IA: {session.user?.email || "vendedor"}
+                        </small>
+                        <button
+                          type="button"
+                          onClick={() => supabase.auth.signOut()}
+                        >
+                          Cerrar sesión
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <input
+                          type="email"
                           placeholder="Correo del vendedor"
                           value={sellerEmail}
                           onChange={(e) => setSellerEmail(e.target.value)}
@@ -3808,4 +4096,3 @@ function Dashboard({ clients, proposals, orders, onNavigate }) {
     </>
   );
 }
-
