@@ -1,122 +1,3811 @@
-import React,{useEffect,useState}from'react';
-import{supabase}from'./supabaseClient';
-import{getDocument,GlobalWorkerOptions}from'pdfjs-dist';
-import pdfWorker from'pdfjs-dist/build/pdf.worker.min.mjs?url';
-GlobalWorkerOptions.workerSrc=pdfWorker;
-import{Users,Shirt,Image as ImageIcon,FileText,ShoppingBag,Plus,Upload,Send,Home,BarChart3,Building2,ShieldCheck,Factory}from'lucide-react';
-const demoProducts=[{id:1,name:'Playera clásica',category:'Textil',price:149,visual:'👕',image:'./products/tshirt.webp',surface:'fabric'},{id:2,name:'Taza 11 oz',category:'Promocional',price:89,visual:'☕',image:'./products/mug.webp',surface:'ceramic'},{id:3,name:'Gorra',category:'Textil',price:129,visual:'🧢',image:'./products/cap.webp',surface:'fabric'},{id:4,name:'Lona personalizada',category:'Gran formato',price:180,visual:'▭',image:'./products/banner.svg',surface:'matte'},{id:5,name:'Hoja membretada',category:'Papelería',price:4,visual:'📄',image:'./products/letterhead.svg',surface:'paper'}];
-const modules=[['Clientes',Users],['Productos',Shirt],['Catálogos',FileText],['Mockups',ImageIcon],['Cotizaciones',FileText],['Pedidos',ShoppingBag],['Producción',Factory],['Admin',ShieldCheck]];
-const load=(k,f)=>{try{return JSON.parse(localStorage.getItem(k))||f}catch{return f}};
-const migrateProducts=items=>{const next=(items||demoProducts).map(p=>{if(String(p.id)==='1'||p.image==='./products/tshirt.svg')return {...p,image:'./products/tshirt.webp',surface:'fabric'};if(String(p.id)==='2'||p.image==='./products/mug.svg')return {...p,image:'./products/mug.webp',surface:'ceramic'};if(String(p.id)==='3'||p.image==='./products/cap.svg')return {...p,image:'./products/cap.webp',surface:'fabric'};return p});try{localStorage.setItem('msp_products',JSON.stringify(next))}catch{}return next};
-const loadProducts=()=>migrateProducts(load('msp_products',demoProducts));
-const isPhotoAsset=p=>{const src=String(p?.image||'').toLowerCase();return src.startsWith('data:image/')||/\.(png|jpe?g|webp|avif)(?:[?#].*)?$/.test(src)};
-const productPlacements=p=>p?.surface==='fabric'?['Frente','Pecho izquierdo','Pecho derecho','Espalda','Manga','Área completa']:p?.surface==='ceramic'?['Frente','Área completa']:p?.surface==='paper'?['Frente','Área completa']:['Frente','Área completa'];
-const productPreset=(p,place='Frente')=>{const presets=p?.surface==='fabric'?{'Frente':[50,50,34,0,0,'multiply'],'Pecho izquierdo':[42,43,18,0,0,'multiply'],'Pecho derecho':[58,43,18,0,0,'multiply'],'Espalda':[50,50,36,0,0,'multiply'],'Manga':[27,43,14,0,0,'multiply'],'Área completa':[50,52,52,0,0,'multiply']}:p?.surface==='ceramic'?{'Frente':[50,50,28,-5,0,'multiply'],'Área completa':[50,50,48,-8,0,'multiply']}:p?.surface==='paper'?{'Frente':[50,50,34,0,0,'normal'],'Área completa':[50,50,68,0,0,'normal']}:{'Frente':[50,50,34,0,0,'normal'],'Área completa':[50,50,62,0,0,'normal']};return presets[place]||presets.Frente};
-const dataUrlBytes=src=>Math.max(0,Math.round((String(src||'').length-String(src||'').indexOf(',')-1)*.75));
-const optimizeProductPhoto=(file,maxSide=1400,quality=.86)=>new Promise((resolve,reject)=>{const rd=new FileReader();rd.onerror=()=>reject(new Error('No se pudo leer la foto'));rd.onload=()=>{const img=new Image();img.onerror=()=>reject(new Error('La imagen no es válida'));img.onload=()=>{const scale=Math.min(1,maxSide/Math.max(img.naturalWidth,img.naturalHeight)),width=Math.max(1,Math.round(img.naturalWidth*scale)),height=Math.max(1,Math.round(img.naturalHeight*scale)),canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d');if(!ctx)return reject(new Error('No se pudo preparar la foto'));ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.clearRect(0,0,width,height);ctx.drawImage(img,0,0,width,height);const src=canvas.toDataURL('image/webp',quality);resolve({src,width,height,bytes:dataUrlBytes(src),originalWidth:img.naturalWidth,originalHeight:img.naturalHeight,name:file.name})};img.src=String(rd.result||'')};rd.readAsDataURL(file)});
-const dataUrlToBlob=src=>{const [head,body]=String(src||'').split(',');const mime=(head.match(/data:([^;]+)/)||[])[1]||'image/webp',bin=atob(body||''),bytes=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);return new Blob([bytes],{type:mime})};
-const isCloudStoragePath=src=>{const s=String(src||'');return !!s&&!s.startsWith('./')&&!s.startsWith('http://')&&!s.startsWith('https://')&&!s.startsWith('data:')};
-const openCatalogDb=()=>new Promise((resolve,reject)=>{const req=indexedDB.open('mockupro_catalogs',1);req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains('catalogs'))db.createObjectStore('catalogs',{keyPath:'id'})};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)});
-const idbCatalogs=async()=>{const db=await openCatalogDb();return new Promise((resolve,reject)=>{const tx=db.transaction('catalogs','readonly'),req=tx.objectStore('catalogs').getAll();req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error)})};
-const idbPutCatalog=async record=>{const db=await openCatalogDb();return new Promise((resolve,reject)=>{const tx=db.transaction('catalogs','readwrite');tx.objectStore('catalogs').put(record);tx.oncomplete=()=>resolve(record);tx.onerror=()=>reject(tx.error)})};
-const idbDeleteCatalog=async id=>{const db=await openCatalogDb();return new Promise((resolve,reject)=>{const tx=db.transaction('catalogs','readwrite');tx.objectStore('catalogs').delete(id);tx.oncomplete=()=>resolve(true);tx.onerror=()=>reject(tx.error)})};
-const normalizeSearch=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-const catalogSnippet=(text,q)=>{const t=String(text||''),needle=normalizeSearch(q).trim(),nt=normalizeSearch(t);if(!needle)return t.slice(0,210);const first=needle.split(/\s+/).filter(Boolean)[0]||needle,i=nt.indexOf(first);const start=Math.max(0,(i<0?0:i)-75);return (start>0?'…':'')+t.slice(start,start+260)+(start+260<t.length?'…':'')};
+import React, { useEffect, useState } from "react";
+import { supabase } from "./supabaseClient";
+import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
+import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+GlobalWorkerOptions.workerSrc = pdfWorker;
+import {
+  Users,
+  Shirt,
+  Image as ImageIcon,
+  FileText,
+  ShoppingBag,
+  Plus,
+  Upload,
+  Send,
+  Home,
+  BarChart3,
+  Building2,
+  ShieldCheck,
+  Factory,
+} from "lucide-react";
+const demoProducts = [
+  {
+    id: 1,
+    name: "Playera clásica",
+    category: "Textil",
+    price: 149,
+    visual: "👕",
+    image: "./products/tshirt.webp",
+    surface: "fabric",
+  },
+  {
+    id: 2,
+    name: "Taza 11 oz",
+    category: "Promocional",
+    price: 89,
+    visual: "☕",
+    image: "./products/mug.webp",
+    surface: "ceramic",
+  },
+  {
+    id: 3,
+    name: "Gorra",
+    category: "Textil",
+    price: 129,
+    visual: "🧢",
+    image: "./products/cap.webp",
+    surface: "fabric",
+  },
+  {
+    id: 4,
+    name: "Lona personalizada",
+    category: "Gran formato",
+    price: 180,
+    visual: "▭",
+    image: "./products/banner.svg",
+    surface: "matte",
+  },
+  {
+    id: 5,
+    name: "Hoja membretada",
+    category: "Papelería",
+    price: 4,
+    visual: "📄",
+    image: "./products/letterhead.svg",
+    surface: "paper",
+  },
+];
+const modules = [
+  ["Clientes", Users],
+  ["Productos", Shirt],
+  ["Catálogos", FileText],
+  ["Mockups", ImageIcon],
+  ["Cotizaciones", FileText],
+  ["Pedidos", ShoppingBag],
+  ["Producción", Factory],
+  ["Admin", ShieldCheck],
+];
+const load = (k, f) => {
+  try {
+    return JSON.parse(localStorage.getItem(k)) || f;
+  } catch {
+    return f;
+  }
+};
+const migrateProducts = (items) => {
+  const next = (items || demoProducts).map((p) => {
+    if (String(p.id) === "1" || p.image === "./products/tshirt.svg")
+      return { ...p, image: "./products/tshirt.webp", surface: "fabric" };
+    if (String(p.id) === "2" || p.image === "./products/mug.svg")
+      return { ...p, image: "./products/mug.webp", surface: "ceramic" };
+    if (String(p.id) === "3" || p.image === "./products/cap.svg")
+      return { ...p, image: "./products/cap.webp", surface: "fabric" };
+    return p;
+  });
+  try {
+    localStorage.setItem("msp_products", JSON.stringify(next));
+  } catch {}
+  return next;
+};
+const loadProducts = () => migrateProducts(load("msp_products", demoProducts));
+const isPhotoAsset = (p) => {
+  const src = String(p?.image || "").toLowerCase();
+  return (
+    src.startsWith("data:image/") ||
+    /\.(png|jpe?g|webp|avif)(?:[?#].*)?$/.test(src)
+  );
+};
+const productPlacements = (p) =>
+  p?.surface === "fabric"
+    ? [
+        "Frente",
+        "Pecho izquierdo",
+        "Pecho derecho",
+        "Espalda",
+        "Manga",
+        "Área completa",
+      ]
+    : p?.surface === "ceramic"
+      ? ["Frente", "Área completa"]
+      : p?.surface === "paper"
+        ? ["Frente", "Área completa"]
+        : ["Frente", "Área completa"];
+const productPreset = (p, place = "Frente") => {
+  const presets =
+    p?.surface === "fabric"
+      ? {
+          Frente: [50, 50, 34, 0, 0, "multiply"],
+          "Pecho izquierdo": [42, 43, 18, 0, 0, "multiply"],
+          "Pecho derecho": [58, 43, 18, 0, 0, "multiply"],
+          Espalda: [50, 50, 36, 0, 0, "multiply"],
+          Manga: [27, 43, 14, 0, 0, "multiply"],
+          "Área completa": [50, 52, 52, 0, 0, "multiply"],
+        }
+      : p?.surface === "ceramic"
+        ? {
+            Frente: [50, 50, 28, -5, 0, "multiply"],
+            "Área completa": [50, 50, 48, -8, 0, "multiply"],
+          }
+        : p?.surface === "paper"
+          ? {
+              Frente: [50, 50, 34, 0, 0, "normal"],
+              "Área completa": [50, 50, 68, 0, 0, "normal"],
+            }
+          : {
+              Frente: [50, 50, 34, 0, 0, "normal"],
+              "Área completa": [50, 50, 62, 0, 0, "normal"],
+            };
+  return presets[place] || presets.Frente;
+};
+const dataUrlBytes = (src) =>
+  Math.max(
+    0,
+    Math.round(
+      (String(src || "").length - String(src || "").indexOf(",") - 1) * 0.75,
+    ),
+  );
+const optimizeProductPhoto = (file, maxSide = 1400, quality = 0.86) =>
+  new Promise((resolve, reject) => {
+    const rd = new FileReader();
+    rd.onerror = () => reject(new Error("No se pudo leer la foto"));
+    rd.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("La imagen no es válida"));
+      img.onload = () => {
+        const scale = Math.min(
+            1,
+            maxSide / Math.max(img.naturalWidth, img.naturalHeight),
+          ),
+          width = Math.max(1, Math.round(img.naturalWidth * scale)),
+          height = Math.max(1, Math.round(img.naturalHeight * scale)),
+          canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return reject(new Error("No se pudo preparar la foto"));
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        const src = canvas.toDataURL("image/webp", quality);
+        resolve({
+          src,
+          width,
+          height,
+          bytes: dataUrlBytes(src),
+          originalWidth: img.naturalWidth,
+          originalHeight: img.naturalHeight,
+          name: file.name,
+        });
+      };
+      img.src = String(rd.result || "");
+    };
+    rd.readAsDataURL(file);
+  });
+const dataUrlToBlob = (src) => {
+  const [head, body] = String(src || "").split(",");
+  const mime = (head.match(/data:([^;]+)/) || [])[1] || "image/webp",
+    bin = atob(body || ""),
+    bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+};
+const isCloudStoragePath = (src) => {
+  const s = String(src || "");
+  return (
+    !!s &&
+    !s.startsWith("./") &&
+    !s.startsWith("http://") &&
+    !s.startsWith("https://") &&
+    !s.startsWith("data:")
+  );
+};
+const openCatalogDb = () =>
+  new Promise((resolve, reject) => {
+    const req = indexedDB.open("mockupro_catalogs", 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains("catalogs"))
+        db.createObjectStore("catalogs", { keyPath: "id" });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+const idbCatalogs = async () => {
+  const db = await openCatalogDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("catalogs", "readonly"),
+      req = tx.objectStore("catalogs").getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+};
+const idbPutCatalog = async (record) => {
+  const db = await openCatalogDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("catalogs", "readwrite");
+    tx.objectStore("catalogs").put(record);
+    tx.oncomplete = () => resolve(record);
+    tx.onerror = () => reject(tx.error);
+  });
+};
+const idbDeleteCatalog = async (id) => {
+  const db = await openCatalogDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("catalogs", "readwrite");
+    tx.objectStore("catalogs").delete(id);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+};
+const normalizeSearch = (v) =>
+  String(v || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+const catalogSnippet = (text, q) => {
+  const t = String(text || ""),
+    needle = normalizeSearch(q).trim(),
+    nt = normalizeSearch(t);
+  if (!needle) return t.slice(0, 210);
+  const first = needle.split(/\s+/).filter(Boolean)[0] || needle,
+    i = nt.indexOf(first);
+  const start = Math.max(0, (i < 0 ? 0 : i) - 75);
+  return (
+    (start > 0 ? "…" : "") +
+    t.slice(start, start + 260) +
+    (start + 260 < t.length ? "…" : "")
+  );
+};
 
-export default function App(){
- const[active,setActive]=useState('Inicio'),[search,setSearch]=useState(''),[category,setCategory]=useState('Todos'),[productColor,setProductColor]=useState('#eef2f6'),[rotation,setRotation]=useState(0),[placement,setPlacement]=useState('Frente'),[notes,setNotes]=useState(''),[selectedClient,setSelectedClient]=useState(''),[notice,setNotice]=useState('');
- const[aiPreset,setAiPreset]=useState('studio'),[aiBusy,setAiBusy]=useState(false),[aiOriginal,setAiOriginal]=useState(''),[session,setSession]=useState(null),[sellerEmail,setSellerEmail]=useState(''),[tenantId,setTenantId]=useState(''),[currentRole,setCurrentRole]=useState(''),[teamMembers,setTeamMembers]=useState([]),[inviteEmail,setInviteEmail]=useState(''),[inviteRole,setInviteRole]=useState('salesperson'),[adminBusy,setAdminBusy]=useState(false),[productionJobs,setProductionJobs]=useState([]),[suppliers,setSuppliers]=useState([]),[purchaseOrders,setPurchaseOrders]=useState([]),[supplierForm,setSupplierForm]=useState({name:'',contact_name:'',phone:'',email:''}),[purchaseDrafts,setPurchaseDrafts]=useState({}),[productionBusy,setProductionBusy]=useState(''),[cloudReady,setCloudReady]=useState(false),[cloudBusy,setCloudBusy]=useState(false),[cloudError,setCloudError]=useState('');
- const[company,setCompany]=useState(()=>load('msp_company',{name:'EMPRESA DEMO',phone:'',email:''})),[clients,setClients]=useState(()=>load('msp_clients',[])),[products,setProducts]=useState(loadProducts),[product,setProduct]=useState(()=>loadProducts()[0]||demoProducts[0]);
- const[logo,setLogo]=useState(''),[size,setSize]=useState(35),[x,setX]=useState(50),[y,setY]=useState(50),[dragging,setDragging]=useState(false),[realism,setRealism]=useState(82),[logoOpacity,setLogoOpacity]=useState(94),[blendMode,setBlendMode]=useState('multiply'),[zoom,setZoom]=useState(1),[viewMode,setViewMode]=useState('Estudio'),[fitMode,setFitMode]=useState('contain'),[photoX,setPhotoX]=useState(50),[photoY,setPhotoY]=useState(50),[skewX,setSkewX]=useState(0),[skewY,setSkewY]=useState(0),[compare,setCompare]=useState(false),[favorite,setFavorite]=useState(false),[qty,setQty]=useState(1),[discount,setDiscount]=useState(0),[proposals,setProposals]=useState(()=>load('msp_proposals',[])),[orders,setOrders]=useState(()=>load('msp_orders',[])),[quoteFilter,setQuoteFilter]=useState('Todos'),[presentation,setPresentation]=useState(false),[clientForm,setClientForm]=useState({name:'',phone:'',email:''}),[productForm,setProductForm]=useState({name:'',category:'Promocional',price:'',image:'',surface:'matte'}),[productPhotoMeta,setProductPhotoMeta]=useState(null),[catalogs,setCatalogs]=useState([]),[catalogBrand,setCatalogBrand]=useState(''),[catalogQuery,setCatalogQuery]=useState(''),[catalogBusy,setCatalogBusy]=useState(false),[catalogProgress,setCatalogProgress]=useState(''),[catalogSearchResults,setCatalogSearchResults]=useState([]),[catalogSearchBusy,setCatalogSearchBusy]=useState(false);
- const signedProductUrl=async path=>{if(!isCloudStoragePath(path))return path||'';const{data,error}=await supabase.storage.from('product-images').createSignedUrl(path,86400);if(error)throw error;return data.signedUrl};
- const hydrateCloudProduct=async row=>({id:row.legacy_id||row.id,dbId:row.id,name:row.name,category:row.category,price:Number(row.price||0),image:await signedProductUrl(row.image_url||''),imagePath:row.image_url||'',surface:row.surface||'matte',imageMeta:row.image_meta||null});
- const ensureTenant=async user=>{const{data:members,error:memberError}=await supabase.from('tenant_members').select('tenant_id').eq('user_id',user.id).limit(1);if(memberError)throw memberError;if(members?.[0]?.tenant_id)return members[0].tenant_id;const slug='mockupro-'+String(user.id).replace(/-/g,''),name=(user.email?.split('@')[0]||'Mi empresa')+' · MockuPro';let{data:tenant,error}=await supabase.from('tenants').insert({name,slug,created_by:user.id}).select('id').single();if(error?.code==='23505'){const retry=await supabase.from('tenants').select('id').eq('slug',slug).eq('created_by',user.id).maybeSingle();tenant=retry.data;error=retry.error}if(error)throw error;if(!tenant?.id)throw new Error('No se pudo crear la empresa inicial');const member=await supabase.from('tenant_members').upsert({tenant_id:tenant.id,user_id:user.id,role:'tenant_admin'},{onConflict:'tenant_id,user_id'});if(member.error)throw member.error;return tenant.id};
- const uploadCloudImage=async(src,tid)=>{if(!String(src||'').startsWith('data:image/'))return src||'';const blob=dataUrlToBlob(src),ext=blob.type==='image/png'?'png':blob.type==='image/jpeg'?'jpg':'webp',path=tid+'/'+crypto.randomUUID()+'.'+ext;const{error}=await supabase.storage.from('product-images').upload(path,blob,{contentType:blob.type,cacheControl:'86400',upsert:false});if(error)throw error;return path};
- const migrateLocalCatalog=async tid=>{const local=loadProducts();for(const p of local){let imageRef=p.image||'';if(String(imageRef).startsWith('data:image/'))imageRef=await uploadCloudImage(imageRef,tid);const{error}=await supabase.from('products').insert({tenant_id:tid,name:p.name,category:p.category||'Otros',price:Number(p.price||0),image_url:imageRef||null,surface:p.surface||'matte',image_meta:p.imageMeta||{},legacy_id:String(p.id)});if(error&&error.code!=='23505')throw error}};
- const canManageCatalogs=currentRole==='tenant_admin'||currentRole==='catalog_manager';
- const canManageProducts=!session?.user||currentRole==='tenant_admin'||currentRole==='catalog_manager';
- const canManageClients=!session?.user||currentRole==='tenant_admin'||currentRole==='salesperson';
- const catalogCanvasBlob=canvas=>new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('No se pudo generar miniatura')),'image/webp',.72));
- const sha256Hex=async buffer=>{const hash=await crypto.subtle.digest('SHA-256',buffer.slice(0)),bytes=new Uint8Array(hash);return Array.from(bytes).map(b=>b.toString(16).padStart(2,'0')).join('')};
- const loadCloudCatalogs=async tid=>{const{data,error}=await supabase.from('catalogs').select('id,brand,name,version,file_path,file_name,file_size,page_count,status,created_at,archived_at,metadata').eq('tenant_id',tid).in('status',['active','archived','processing','error']).order('created_at',{ascending:false});if(error)throw error;setCatalogs((data||[]).map(x=>({id:x.id,brand:x.brand,name:x.name,version:x.version,filename:x.file_name,bytes:Number(x.file_size||0),totalPages:x.page_count,status:x.status,filePath:x.file_path,createdAt:x.created_at,archivedAt:x.archived_at,cloud:true})))};
- const loadTeam=async tid=>{const{data:members,error}=await supabase.from('tenant_members').select('tenant_id,user_id,role,created_at').eq('tenant_id',tid).order('created_at',{ascending:true});if(error)throw error;const ids=(members||[]).map(m=>m.user_id),profiles=ids.length?(await supabase.from('profiles').select('id,email,display_name').in('id',ids)).data||[]:[];setTeamMembers((members||[]).map(m=>({...m,profile:profiles.find(p=>p.id===m.user_id)||null})))};
- const quoteFromCloud=row=>{const p=row.payload||{};return{...p,id:row.id,dbId:row.id,folio:row.folio,status:row.status,total:Number(row.total||0),clientId:row.customer_id||null,clientName:p.clientName||'Sin asignar',createdAt:row.created_at,createdBy:row.created_by,sourceKey:row.source_key||null,cloud:true}};
- const loadCloudCommerce=async tid=>{const[customerRes,quoteRes]=await Promise.all([supabase.from('customers').select('id,name,phone,email,notes,created_at').eq('tenant_id',tid).order('created_at',{ascending:true}),supabase.from('quotes').select('id,customer_id,created_by,folio,status,total,payload,created_at,source_key').eq('tenant_id',tid).order('created_at',{ascending:false}).limit(500)]);if(customerRes.error)throw customerRes.error;if(quoteRes.error)throw quoteRes.error;setClients(customerRes.data||[]);setProposals((quoteRes.data||[]).map(quoteFromCloud))};
- const loadCloudOrders=async tid=>{const{data,error}=await supabase.from('orders').select('id,folio,status,total,payload,created_at,source_key,created_by,order_items(description,qty,unit_price)').eq('tenant_id',tid).order('created_at',{ascending:false}).limit(200);if(error)return;const cloud=(data||[]).map(o=>{const item=o.order_items?.[0]||{},proposalId=o.payload?.localProposalId||null;return{id:o.id,cloudOrderId:o.id,folio:o.folio,proposalId,productId:o.payload?.productLocalId||null,clientName:o.payload?.clientName||'Sin asignar',product:o.payload?.productName||item.description||'Producto',qty:Number(item.qty||1),total:Number(o.total||0),status:o.status||'Nuevo',createdAt:o.created_at,createdBy:o.created_by}}),local=load('msp_orders',[]),merged=[...cloud,...local.filter(l=>!cloud.some(x=>(x.proposalId&&String(x.proposalId)===String(l.proposalId))||(l.cloudOrderId&&String(x.cloudOrderId)===String(l.cloudOrderId))))];setOrders(merged);try{localStorage.setItem('msp_orders',JSON.stringify(merged))}catch{}};
- const loadProduction=async(tid,role=currentRole)=>{const jobs=await supabase.from('production_jobs').select('id,order_id,assigned_to,status,priority,notes,created_at,updated_at,orders(folio,total,payload,created_by,order_items(id,description,qty,unit_price,supplier_id))').eq('tenant_id',tid).order('created_at',{ascending:false}).limit(100);if(!jobs.error)setProductionJobs(jobs.data||[]);const supplierRes=await supabase.from('suppliers').select('id,name,contact_name,phone,email,active').eq('tenant_id',tid).eq('active',true).order('name');if(!supplierRes.error)setSuppliers(supplierRes.data||[]);if(role==='tenant_admin'||role==='production'){const po=await supabase.from('purchase_orders').select('id,order_id,supplier_id,folio,supplier_reference,status,cost_total,expected_at,received_at,notes,created_at,suppliers(name),purchase_order_items(id,description,qty,unit_cost)').eq('tenant_id',tid).order('created_at',{ascending:false}).limit(200);if(!po.error)setPurchaseOrders(po.data||[])}else setPurchaseOrders([])};
- const syncCloudCatalog=async user=>{setCloudBusy(true);setCloudError('');try{const tid=await ensureTenant(user);setTenantId(tid);const{data:member}=await supabase.from('tenant_members').select('role').eq('tenant_id',tid).eq('user_id',user.id).maybeSingle();setCurrentRole(member?.role||'');if(member?.role==='tenant_admin')await loadTeam(tid);await loadCloudCommerce(tid);await loadProduction(tid,member?.role||'');await loadCloudOrders(tid);await loadCloudCatalogs(tid);let{data,error}=await supabase.from('products').select('id,tenant_id,name,category,price,image_url,active,created_at,surface,image_meta,legacy_id').eq('tenant_id',tid).eq('active',true).order('created_at',{ascending:true});if(error)throw error;if(!data?.length){await migrateLocalCatalog(tid);const retry=await supabase.from('products').select('id,tenant_id,name,category,price,image_url,active,created_at,surface,image_meta,legacy_id').eq('tenant_id',tid).eq('active',true).order('created_at',{ascending:true});if(retry.error)throw retry.error;data=retry.data||[]}const hydrated=[];for(const row of data||[])hydrated.push(await hydrateCloudProduct(row));if(hydrated.length){setProducts(hydrated);setProduct(cur=>hydrated.find(p=>String(p.id)===String(cur?.id))||hydrated[0])}setCloudReady(true)}catch(e){console.error(e);setCloudError(e.message||'No se pudo sincronizar la empresa');setCloudReady(false)}finally{setCloudBusy(false)}};
- useEffect(()=>{supabase.auth.getSession().then(({data})=>setSession(data.session||null));const{data}=supabase.auth.onAuthStateChange((_e,s)=>setSession(s));return()=>data.subscription.unsubscribe()},[]);
- useEffect(()=>{if(!session?.user)idbCatalogs().then(rows=>setCatalogs((rows||[]).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))))).catch(()=>{})},[session?.user?.id]);
- useEffect(()=>{if(session?.user){(async()=>{try{await supabase.functions.invoke('claim-team-invite',{body:{}})}catch{}await syncCloudCatalog(session.user)})()}else{setTenantId('');setCurrentRole('');setTeamMembers([]);setProductionJobs([]);setSuppliers([]);setPurchaseOrders([]);setCloudReady(false);setCloudError('');const local=loadProducts();setProducts(local);setProduct(local[0]||demoProducts[0])}},[session?.user?.id]);
- useEffect(()=>{if(tenantId&&session?.user&&(active==='Producción'||active==='Pedidos')){loadProduction(tenantId,currentRole);loadCloudOrders(tenantId)}},[active,tenantId,currentRole]);
- useEffect(()=>{if(tenantId&&session?.user&&active==='Catálogos')loadCloudCatalogs(tenantId).catch(()=>{})},[active,tenantId,currentRole]);
- const indexCatalogPdf=async e=>{const f=e.target.files?.[0];e.target.value='';if(!f)return;if(f.type!=='application/pdf'&&!/\.pdf$/i.test(f.name))return notify('Selecciona un catálogo PDF');if(f.size>80*1024*1024)return notify('El catálogo supera 80 MB');if(!session?.user||!tenantId)return notify('Inicia sesión para subir catálogos compartidos');if(!canManageCatalogs)return notify('Solo Administración o Catálogos pueden subir PDFs');const brand=catalogBrand.trim();if(!brand)return notify('Escribe primero la marca o proveedor');setCatalogBusy(true);setCatalogProgress('Preparando PDF…');let pdfPath='',catalogId='',uploadedImages=[];try{const buf=await f.arrayBuffer(),checksum=await sha256Hex(buf),pdf=await getDocument({data:new Uint8Array(buf.slice(0))}).promise,safe=f.name.replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/^-+|-+$/g,'')||'catalogo.pdf';pdfPath=tenantId+'/'+crypto.randomUUID()+'-'+safe;setCatalogProgress('Subiendo PDF a la nube…');const up=await supabase.storage.from('catalog-pdfs').upload(pdfPath,f,{contentType:'application/pdf',cacheControl:'3600',upsert:false});if(up.error)throw up.error;const begin=await supabase.rpc('begin_catalog_upload',{p_tenant_id:tenantId,p_brand:brand,p_name:f.name.replace(/\.pdf$/i,''),p_version:null,p_file_path:pdfPath,p_file_name:f.name,p_file_size:f.size,p_checksum:checksum});if(begin.error)throw begin.error;catalogId=begin.data;let batch=[];for(let n=1;n<=pdf.numPages;n++){setCatalogProgress('Indexando página '+n+' de '+pdf.numPages);const page=await pdf.getPage(n),tc=await page.getTextContent(),text=tc.items.map(i=>i.str||'').join(' ').replace(/\s+/g,' ').trim(),base=page.getViewport({scale:1}),scale=Math.min(.65,420/Math.max(1,base.width)),viewport=page.getViewport({scale}),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(viewport.width));canvas.height=Math.max(1,Math.round(viewport.height));const ctx=canvas.getContext('2d');let imagePath=null;if(ctx){await page.render({canvasContext:ctx,viewport}).promise;const blob=await catalogCanvasBlob(canvas);imagePath=tenantId+'/'+catalogId+'/page-'+String(n).padStart(4,'0')+'.webp';const imgUp=await supabase.storage.from('catalog-images').upload(imagePath,blob,{contentType:'image/webp',cacheControl:'86400',upsert:false});if(imgUp.error)throw imgUp.error;uploadedImages.push(imagePath)}batch.push({tenant_id:tenantId,catalog_id:catalogId,page_number:n,text_content:text,image_path:imagePath});if(batch.length>=20||n===pdf.numPages){const ins=await supabase.from('catalog_pages').insert(batch);if(ins.error)throw ins.error;batch=[]}}setCatalogProgress('Activando catálogo para vendedores…');const fin=await supabase.rpc('finalize_catalog_upload',{p_catalog_id:catalogId,p_page_count:pdf.numPages});if(fin.error)throw fin.error;setCatalogBrand('');await loadCloudCatalogs(tenantId);setCatalogQuery('');setCatalogSearchResults([]);notify((fin.data?.archived_previous?'Catálogo actualizado':'Catálogo publicado')+' · '+pdf.numPages+' páginas')}catch(err){console.error(err);if(catalogId)await supabase.from('catalogs').delete().eq('id',catalogId).eq('tenant_id',tenantId);if(uploadedImages.length)await supabase.storage.from('catalog-images').remove(uploadedImages);if(pdfPath)await supabase.storage.from('catalog-pdfs').remove([pdfPath]);notify(err.message||'No se pudo procesar el catálogo')}finally{setCatalogBusy(false);setCatalogProgress('')}};
- const archiveCatalog=async id=>{if(!canManageCatalogs)return notify('No tienes permiso para archivar catálogos');if(!confirm('¿Archivar este catálogo? Dejará de aparecer en las búsquedas de vendedores.'))return;setCatalogBusy(true);try{const{error}=await supabase.rpc('archive_catalog',{p_catalog_id:id});if(error)throw error;await loadCloudCatalogs(tenantId);setCatalogSearchResults([]);notify('Catálogo archivado')}catch(e){notify(e.message||'No se pudo archivar')}finally{setCatalogBusy(false)}};
- const removeCatalog=async id=>{const target=catalogs.find(x=>String(x.id)===String(id));if(target?.cloud){if(!canManageCatalogs)return notify('No tienes permiso para eliminar catálogos');if(!confirm('¿Eliminar definitivamente este catálogo y sus archivos?'))return;setCatalogBusy(true);try{const pages=await supabase.from('catalog_pages').select('image_path').eq('catalog_id',id);const imagePaths=(pages.data||[]).map(x=>x.image_path).filter(Boolean);if(imagePaths.length)await supabase.storage.from('catalog-images').remove(imagePaths);if(target.filePath)await supabase.storage.from('catalog-pdfs').remove([target.filePath]);const del=await supabase.from('catalogs').delete().eq('id',id).eq('tenant_id',tenantId);if(del.error)throw del.error;await loadCloudCatalogs(tenantId);setCatalogSearchResults(v=>v.filter(x=>String(x.catalogId)!==String(id)));notify('Catálogo eliminado definitivamente')}catch(e){notify(e.message||'No se pudo eliminar')}finally{setCatalogBusy(false)}return}if(!confirm('¿Eliminar este catálogo y su índice de búsqueda?'))return;try{await idbDeleteCatalog(id);setCatalogs(v=>v.filter(x=>x.id!==id));notify('Catálogo eliminado')}catch(e){notify('No se pudo eliminar el catálogo')}};
- const openCatalogPage=async item=>{try{if(item.filePath||item.file_path||item.cloud){const path=item.filePath||item.file_path||catalogs.find(c=>String(c.id)===String(item.catalogId||item.id))?.filePath;if(!path)throw new Error('No se encontró el PDF');const{data,error}=await supabase.storage.from('catalog-pdfs').createSignedUrl(path,600);if(error)throw error;const w=window.open(data.signedUrl+'#page='+(item.page||item.page_number||1),'_blank');if(!w)notify('El navegador bloqueó la apertura del PDF');return}const blob=new Blob([item.pdfBytes],{type:'application/pdf'}),url=URL.createObjectURL(blob),w=window.open(url+'#page='+(item.page||1),'_blank');if(!w)notify('El navegador bloqueó la apertura del PDF');setTimeout(()=>URL.revokeObjectURL(url),60000)}catch(e){notify(e.message||'No se pudo abrir el PDF')}};
- const searchCloudCatalogs=async q=>{const term=q.trim();if(!session?.user||!tenantId||term.length<2){setCatalogSearchResults([]);return}setCatalogSearchBusy(true);try{const{data,error}=await supabase.rpc('search_catalog_pages',{search_query:term,max_results:80});if(error)throw error;const rows=data||[],paths=[...new Set(rows.map(x=>x.page_image_path).filter(Boolean))],signed={};if(paths.length){const s=await supabase.storage.from('catalog-images').createSignedUrls(paths,600);for(const x of s.data||[])if(x.path&&x.signedUrl)signed[x.path]=x.signedUrl}setCatalogSearchResults(rows.map(x=>({catalogId:x.catalog_id,catalogName:x.catalog_name,brand:x.brand,page:x.page_number,text:x.text_content,filePath:x.file_path,pageImagePath:x.page_image_path,pageImageUrl:signed[x.page_image_path]||null,cloud:true})))}catch(e){console.error(e);setCatalogSearchResults([])}finally{setCatalogSearchBusy(false)}};
- const catalogResults=session?.user?catalogSearchResults:(()=>{const q=normalizeSearch(catalogQuery).trim(),terms=q.split(/\s+/).filter(Boolean);if(!terms.length)return[];const out=[];for(const cat of catalogs){const brand=normalizeSearch(cat.brand+' '+cat.name);for(const p of cat.pages||[]){const hay=brand+' '+(p.search||normalizeSearch(p.text));if(terms.every(t=>hay.includes(t))){out.push({catalogId:cat.id,catalogName:cat.name,brand:cat.brand,page:p.page,text:p.text,pdfBytes:cat.pdfBytes});if(out.length>=80)return out}}}return out})();
- useEffect(()=>{if(!session?.user)return;const t=setTimeout(()=>searchCloudCatalogs(catalogQuery),300);return()=>clearTimeout(t)},[catalogQuery,tenantId,session?.user?.id]);
- const roleLabel=r=>({tenant_admin:'Administrador',catalog_manager:'Encargado de catálogos',salesperson:'Vendedor',designer:'Diseño / Mockups',production:'Producción'}[r]||r);
- const inviteTeamMember=async()=>{const email=inviteEmail.trim().toLowerCase();if(currentRole!=='tenant_admin')return notify('Solo el administrador puede invitar usuarios');if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))return notify('Escribe un correo válido');setAdminBusy(true);try{const{data,error}=await supabase.functions.invoke('invite-team-member',{body:{tenantId,email,role:inviteRole}});if(error)throw error;setInviteEmail('');notify(data?.message||'Invitación creada');await loadTeam(tenantId)}catch(e){notify(e.message||'No se pudo enviar la invitación')}finally{setAdminBusy(false)}};
- const changeMemberRole=async(userId,role)=>{if(currentRole!=='tenant_admin')return;setAdminBusy(true);try{const{error}=await supabase.from('tenant_members').update({role}).eq('tenant_id',tenantId).eq('user_id',userId);if(error)throw error;await loadTeam(tenantId);notify('Rol actualizado')}catch(e){notify(e.message||'No se pudo cambiar el rol')}finally{setAdminBusy(false)}};
- const removeMember=async userId=>{if(currentRole!=='tenant_admin')return;if(userId===session?.user?.id)return notify('No puedes retirar tu propio acceso desde aquí');if(!confirm('¿Retirar a este usuario de la empresa?'))return;setAdminBusy(true);try{const{error}=await supabase.from('tenant_members').delete().eq('tenant_id',tenantId).eq('user_id',userId);if(error)throw error;await loadTeam(tenantId);notify('Acceso retirado')}catch(e){notify(e.message||'No se pudo retirar el acceso')}finally{setAdminBusy(false)}};
- const canManageProduction=currentRole==='tenant_admin'||currentRole==='production';
- const updatePurchaseDraft=(jobId,patch)=>setPurchaseDrafts(v=>({...v,[jobId]:{supplierId:'',costTotal:'',reference:'',expectedAt:'',notes:'',...(v[jobId]||{}),...patch}}));
- const addSupplier=async()=>{if(!canManageProduction)return notify('Solo Administración o Producción pueden crear proveedores');const name=supplierForm.name.trim();if(!name)return notify('Escribe el nombre del proveedor');setProductionBusy('supplier');try{const{error}=await supabase.from('suppliers').insert({tenant_id:tenantId,name,contact_name:supplierForm.contact_name.trim()||null,phone:supplierForm.phone.trim()||null,email:supplierForm.email.trim()||null,created_by:session.user.id});if(error)throw error;setSupplierForm({name:'',contact_name:'',phone:'',email:''});await loadProduction(tenantId,currentRole);notify('Proveedor agregado')}catch(e){notify(e.message||'No se pudo guardar el proveedor')}finally{setProductionBusy('')}};
- const createSupplierOrder=async job=>{if(!canManageProduction)return notify('Solo Administración o Producción pueden solicitar al proveedor');const d=purchaseDrafts[job.id]||{},supplierId=d.supplierId;if(!supplierId)return notify('Selecciona un proveedor');setProductionBusy(job.id);try{const expected=d.expectedAt?new Date(d.expectedAt).toISOString():null,{data,error}=await supabase.rpc('create_purchase_order_for_job',{p_job_id:job.id,p_supplier_id:supplierId,p_cost_total:Math.max(0,Number(d.costTotal)||0),p_supplier_reference:d.reference?.trim()||null,p_expected_at:expected,p_notes:d.notes?.trim()||null});if(error)throw error;await loadProduction(tenantId,currentRole);await loadCloudOrders(tenantId);notify(data?.duplicate?'Ya existía una orden activa para ese proveedor':'Orden enviada al proveedor')}catch(e){notify(e.message||'No se pudo crear la orden de compra')}finally{setProductionBusy('')}};
- const updateSupplierOrder=async(po,status)=>{if(!canManageProduction)return;setProductionBusy(po.id);try{const{error}=await supabase.rpc('update_purchase_order_status',{p_purchase_order_id:po.id,p_status:status,p_supplier_reference:null,p_expected_at:null,p_notes:null});if(error)throw error;await loadProduction(tenantId,currentRole);await loadCloudOrders(tenantId);notify(status==='Recibido'?'Material recibido del proveedor':'Orden de proveedor: '+status)}catch(e){notify(e.message||'No se pudo actualizar la orden')}finally{setProductionBusy('')}};
- const advanceProduction=async(job,status)=>{if(!canManageProduction)return;setProductionBusy(job.id);try{const{error}=await supabase.rpc('advance_production_job',{p_job_id:job.id,p_status:status,p_notes:null});if(error)throw error;await loadProduction(tenantId,currentRole);await loadCloudOrders(tenantId);notify('Producción: '+status)}catch(e){notify(e.message||'No se pudo avanzar producción')}finally{setProductionBusy('')}};
- const sendSellerAccess=async()=>{const email=sellerEmail.trim();if(!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email))return notify('Escribe un correo válido');const{error}=await supabase.auth.signInWithOtp({email,options:{emailRedirectTo:window.location.href.split('#')[0]}});notify(error?'No se pudo enviar el acceso':'Te enviamos un enlace de acceso al correo')};
- const notify=m=>{setNotice(m);setTimeout(()=>setNotice(''),2200)},persist=(k,setter,next)=>{localStorage.setItem(k,JSON.stringify(next));setter(next)};
- const uploadProductPhoto=async e=>{const f=e.target.files?.[0];if(!f)return;if(!/^image\//.test(f.type))return notify('Selecciona una fotografía válida');if(f.size>10*1024*1024)return notify('Foto demasiado grande (máx. 10 MB)');try{const out=await optimizeProductPhoto(f);setAiOriginal(out.src);setProductForm(v=>({...v,image:out.src}));setProductPhotoMeta({name:out.name,width:out.width,height:out.height,bytes:out.bytes,originalWidth:out.originalWidth,originalHeight:out.originalHeight});if(out.originalWidth<900||out.originalHeight<900)notify('Foto optimizada. Para venta conviene partir de mínimo 900 × 900 px');else notify('Foto optimizada automáticamente para MockuPro')}catch(err){notify(err.message||'No se pudo preparar la foto')}}; const prepareProductAI=async()=>{if(!productForm.image?.startsWith('data:image/'))return notify('Primero sube una foto del producto');setAiBusy(true);try{const{data:{session}}=await supabase.auth.getSession();if(!session?.access_token)return notify('La IA ya está preparada; falta iniciar sesión del vendedor para usarla de forma segura');const res=await fetch('https://dsgyioqbatvwhxugumoa.supabase.co/functions/v1/prepare-product-ai',{method:'POST',headers:{'Content-Type':'application/json','apikey':'sb_publishable_dAbY9OY5BO80M9V4rEuVtQ_FZJ3l1AH','Authorization':'Bearer '+session.access_token},body:JSON.stringify({imageDataUrl:productForm.image,preset:aiPreset})});const data=await res.json();if(!res.ok)throw new Error(data.error||'No se pudo procesar la imagen');if(!aiOriginal)setAiOriginal(productForm.image);setProductForm(v=>({...v,image:data.imageDataUrl}));notify('Foto preparada con IA')}catch(e){notify(e.message||'Error de IA')}finally{setAiBusy(false)}}; const addProduct=async()=>{const name=productForm.name.trim(),category=productForm.category.trim()||'Otros',price=Number(productForm.price),image=productForm.image.trim();if(!name)return notify('Escribe el nombre del producto');if(!Number.isFinite(price)||price<0)return notify('Precio no válido');if(image.startsWith('data:image/')&&productPhotoMeta&&(productPhotoMeta.width<640||productPhotoMeta.height<640))return notify('La foto es demasiado pequeña. Usa al menos 640 × 640 px');if(session?.user&&tenantId){setCloudBusy(true);try{const imageRef=await uploadCloudImage(image,tenantId);const{data,error}=await supabase.from('products').insert({tenant_id:tenantId,name,category,price,image_url:imageRef||null,surface:productForm.surface||'matte',image_meta:productPhotoMeta||{}}).select('id,tenant_id,name,category,price,image_url,active,created_at,surface,image_meta,legacy_id').single();if(error)throw error;const created=await hydrateCloudProduct(data),next=[...products,created];setProducts(next);setProductForm({name:'',category:'Promocional',price:'',image:'',surface:'matte'});setProductPhotoMeta(null);setAiOriginal('');notify('Producto guardado en la nube')}catch(e){console.error(e);notify(e.message||'No se pudo guardar el producto')}finally{setCloudBusy(false)}return}const next=[...products,{id:Date.now(),name,category,price,image,surface:productForm.surface||'matte',imageMeta:productPhotoMeta||null}];persist('msp_products',setProducts,next);setProductForm({name:'',category:'Promocional',price:'',image:'',surface:'matte'});setProductPhotoMeta(null);setAiOriginal('');notify('Producto agregado localmente')};
- const deleteProduct=async id=>{if(products.length<=1)return notify('Debe existir al menos un producto');if(proposals.some(q=>String(q.productId)===String(id))||orders.some(o=>String(o.productId)===String(id)))return notify('Producto con historial: no se puede eliminar');if(!confirm('¿Eliminar este producto del catálogo?'))return;const target=products.find(p=>String(p.id)===String(id));if(target?.dbId&&session?.user&&tenantId){setCloudBusy(true);try{const{error}=await supabase.from('products').delete().eq('id',target.dbId).eq('tenant_id',tenantId);if(error)throw error;if(isCloudStoragePath(target.imagePath))await supabase.storage.from('product-images').remove([target.imagePath]);const next=products.filter(p=>String(p.id)!==String(id));setProducts(next);if(String(product.id)===String(id))setProduct(next[0]);notify('Producto eliminado de la nube')}catch(e){console.error(e);notify(e.message||'No se pudo eliminar')}finally{setCloudBusy(false)}return}const next=products.filter(p=>String(p.id)!==String(id));persist('msp_products',setProducts,next);if(String(product.id)===String(id))setProduct(next[0]);notify('Producto eliminado')};
- const replaceProductPhoto=async(id,e)=>{const f=e.target.files?.[0];e.target.value='';if(!f)return;if(!/^image\//.test(f.type))return notify('Selecciona una fotografía válida');if(f.size>10*1024*1024)return notify('Foto demasiado grande (máx. 10 MB)');try{const out=await optimizeProductPhoto(f),meta={name:out.name,width:out.width,height:out.height,bytes:out.bytes,originalWidth:out.originalWidth,originalHeight:out.originalHeight},target=products.find(p=>String(p.id)===String(id));if(target?.dbId&&session?.user&&tenantId){setCloudBusy(true);const newPath=await uploadCloudImage(out.src,tenantId);const{data,error}=await supabase.from('products').update({image_url:newPath,image_meta:meta}).eq('id',target.dbId).eq('tenant_id',tenantId).select('id,tenant_id,name,category,price,image_url,active,created_at,surface,image_meta,legacy_id').single();if(error)throw error;const fresh=await hydrateCloudProduct(data),next=products.map(p=>String(p.id)===String(id)?{...fresh,id:p.id}:p);setProducts(next);if(String(product.id)===String(id))setProduct(next.find(p=>String(p.id)===String(id))||product);if(isCloudStoragePath(target.imagePath)&&target.imagePath!==newPath)await supabase.storage.from('product-images').remove([target.imagePath]);notify('Foto reemplazada y sincronizada');return}const next=products.map(p=>String(p.id)===String(id)?{...p,image:out.src,imageMeta:meta}:p);persist('msp_products',setProducts,next);if(String(product.id)===String(id))setProduct(next.find(p=>String(p.id)===String(id))||product);notify('Foto reemplazada y optimizada')}catch(err){console.error(err);notify(err.message||'No se pudo reemplazar la foto')}finally{setCloudBusy(false)}};
- const addClient=async()=>{const name=clientForm.name.trim(),phone=clientForm.phone.trim(),email=clientForm.email.trim();if(!name)return notify('Escribe el nombre del cliente');if(email&&!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email))return notify('Correo no válido');if(clients.some(c=>c.name.trim().toLowerCase()===name.toLowerCase()&&(c.phone||'').trim()===phone))return notify('Cliente duplicado');if(session?.user&&tenantId){setCloudBusy(true);try{const{data,error}=await supabase.from('customers').insert({tenant_id:tenantId,name,phone:phone||null,email:email||null}).select('id,name,phone,email,notes,created_at').single();if(error)throw error;setClients(v=>[...v,data]);setClientForm({name:'',phone:'',email:''});notify('Cliente guardado para toda la empresa')}catch(e){notify(e.message||'No se pudo guardar el cliente')}finally{setCloudBusy(false)}return}const next=[...clients,{id:Date.now(),name,phone,email}];persist('msp_clients',setClients,next);setClientForm({name:'',phone:'',email:''});notify('Cliente guardado localmente')};
- const deleteClient=async id=>{if(proposals.some(q=>String(q.clientId)===String(id))||orders.some(o=>String(o.clientId)===String(id)))return notify('Cliente con historial: no se puede eliminar');if(!confirm('¿Eliminar este cliente?'))return;if(session?.user&&tenantId&&typeof id==='string'){setCloudBusy(true);try{const{error}=await supabase.from('customers').delete().eq('id',id).eq('tenant_id',tenantId);if(error)throw error;setClients(v=>v.filter(c=>String(c.id)!==String(id)));notify('Cliente eliminado de la empresa')}catch(e){notify(e.message||'No se pudo eliminar el cliente')}finally{setCloudBusy(false)}return}persist('msp_clients',setClients,clients.filter(c=>c.id!==id));notify('Cliente eliminado')};
- const upload=e=>{const f=e.target.files?.[0];if(!f)return;if(!(/^image\//.test(f.type)||/\.svg$/i.test(f.name)))return notify('Archivo de logo no válido');if(f.size>8*1024*1024)return notify('Logo demasiado grande (máx. 8 MB)');const rd=new FileReader();rd.onload=ev=>setLogo(ev.target.result);rd.readAsDataURL(f)};
- const moveLogoToPointer=e=>{const box=e.currentTarget.parentElement?.getBoundingClientRect();if(!box||!box.width||!box.height)return;const nx=Math.max(5,Math.min(95,((e.clientX-box.left)/box.width)*100)),ny=Math.max(5,Math.min(95,((e.clientY-box.top)/box.height)*100));setX(Number(nx.toFixed(1)));setY(Number(ny.toFixed(1)))};
- const startLogoDrag=e=>{e.preventDefault();setDragging(true);e.currentTarget.setPointerCapture?.(e.pointerId);moveLogoToPointer(e)};
- const dragLogo=e=>{if(dragging)moveLogoToPointer(e)};
- const stopLogoDrag=e=>{setDragging(false);if(e.currentTarget.hasPointerCapture?.(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId)};
- const subtotal=Number(product?.price||0)*qty,total=subtotal*(1-discount/100);
- const resetEditor=()=>{setSize(35);setX(50);setY(50);setQty(1);setDiscount(0);setRotation(0);setProductColor('#eef2f6');setPlacement('Frente');setNotes('');setRealism(82);setLogoOpacity(94);setBlendMode('multiply');setZoom(1);setViewMode('Estudio');setFitMode('contain');setPhotoX(50);setPhotoY(50);setSkewX(0);setSkewY(0);setCompare(false);setFavorite(false)};
- const choosePlacement=v=>{setPlacement(v);const p=productPreset(product,v);setX(p[0]);setY(p[1]);setSize(p[2]);setSkewX(p[3]);setSkewY(p[4]);setBlendMode(p[5])};
- const saveProposal=async()=>{if(!logo)return notify('Carga un logo primero');const c=clients.find(z=>String(z.id)===String(selectedClient)),now=Date.now(),folio='COT-'+String(now).slice(-6),payload={version:1,product:product.name,productId:product.id,clientName:c?.name||'Sin asignar',qty,logo,productColor,rotation,x,y,size,placement,notes,favorite,realism,logoOpacity,blendMode,zoom,fitMode,photoX,photoY,skewX,skewY,viewMode};if(session?.user&&tenantId){setCloudBusy(true);try{const{data,error}=await supabase.from('quotes').insert({tenant_id:tenantId,customer_id:selectedClient||null,created_by:session.user.id,folio,status:'Borrador',total,payload,source_key:'web:'+crypto.randomUUID()}).select('id,customer_id,created_by,folio,status,total,payload,created_at,source_key').single();if(error)throw error;setProposals(v=>[quoteFromCloud(data),...v]);notify('Cotización guardada para toda la empresa')}catch(e){notify(e.message||'No se pudo guardar la cotización')}finally{setCloudBusy(false)}return}const q={id:now,folio,createdAt:new Date(now).toISOString(),...payload,clientId:selectedClient||null,total,status:'Borrador'};persist('msp_proposals',setProposals,[q,...proposals]);notify('Propuesta guardada localmente')};
- const loadProposal=q=>{const p=products.find(z=>String(z.id)===String(q.productId));if(p)setProduct(p);setSelectedClient(q.clientId||'');setLogo(q.logo||'');setQty(q.qty||1);setProductColor(q.productColor||'#eef2f6');setRotation(q.rotation||0);setX(q.x??50);setY(q.y??50);setSize(q.size??35);setPlacement(q.placement||'Frente');setNotes(q.notes||'');setFavorite(!!q.favorite);setRealism(q.realism??82);setLogoOpacity(q.logoOpacity??94);setBlendMode(q.blendMode||'multiply');setZoom(q.zoom??1);setFitMode(q.fitMode||'contain');setPhotoX(q.photoX??50);setPhotoY(q.photoY??50);setSkewX(q.skewX??0);setSkewY(q.skewY??0);setViewMode(q.viewMode||'Estudio');setActive('Mockups');notify('Propuesta cargada en el editor')}; const setProposalStatus=async(id,status)=>{const current=proposals.find(q=>q.id===id);if(!current)return;if(current.status==='Aprobado'&&status!=='Aprobado')return notify('Propuesta aprobada: crea una nueva versión');const statusAt=new Date().toISOString();if(current.cloud&&session?.user&&tenantId){const payload={...current,statusAt};delete payload.id;delete payload.dbId;delete payload.cloud;delete payload.folio;delete payload.status;delete payload.total;delete payload.clientId;delete payload.createdAt;delete payload.createdBy;delete payload.sourceKey;const{error}=await supabase.from('quotes').update({status,payload}).eq('id',id).eq('tenant_id',tenantId);if(error)return notify(error.message||'No se pudo actualizar la cotización');setProposals(v=>v.map(q=>q.id===id?{...q,status,statusAt}:q));notify('Estado compartido: '+status);return}persist('msp_proposals',setProposals,proposals.map(q=>q.id===id?{...q,status,statusAt}:q));notify('Estado: '+status)};
- const createProductionOrder=async q=>{if(!q)return;if(!session?.user||!tenantId)return notify('Inicia sesión para aprobar y enviar a producción');if(orders.some(o=>String(o.proposalId)===String(q.id)&&o.cloudOrderId))return notify('Esta cotización ya generó un pedido');setCloudBusy(true);try{const selectedProduct=products.find(p=>String(p.id)===String(q.productId)),dbProductId=selectedProduct?.dbId||(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(selectedProduct?.id||''))?selectedProduct.id:null),sourceKey='proposal:'+String(q.id),orderFolio='PED-'+String(q.id).slice(-6),client=clients.find(c=>String(c.id)===String(q.clientId)),unitPrice=Number(q.qty)>0?Number(q.total||0)/Number(q.qty):0,payload={localProposalId:String(q.id),proposalFolio:q.folio||null,clientName:q.clientName||client?.name||'Sin asignar',clientPhone:client?.phone||null,clientEmail:client?.email||null,productName:q.product,productLocalId:String(q.productId||''),sellerId:session.user.id,placement:q.placement||'Frente',notes:q.notes||'',version:Number(q.version||1),approvedAt:new Date().toISOString()},customization={placement:q.placement||'Frente',productColor:q.productColor||null,rotation:q.rotation||0,x:q.x??50,y:q.y??50,size:q.size??35,realism:q.realism??82,logoOpacity:q.logoOpacity??94,blendMode:q.blendMode||'multiply',skewX:q.skewX??0,skewY:q.skewY??0,logoIncluded:!!q.logo};const{data,error}=await supabase.rpc('approve_quote_to_production',{p_tenant_id:tenantId,p_source_key:sourceKey,p_quote_folio:q.folio||('COT-'+String(q.id).slice(-6)),p_order_folio:orderFolio,p_customer_id:q.clientId||null,p_total:Number(q.total||0),p_payload:payload,p_product_id:dbProductId,p_item_description:q.product||'Producto MockuPro',p_qty:Number(q.qty||1),p_unit_price:unitPrice,p_customization:customization});if(error)throw error;const approvedAt=new Date().toISOString(),nextProposals=proposals.map(p=>p.id===q.id?{...p,status:'Aprobado',statusAt:approvedAt,cloudOrderId:data?.order_id||null,productionJobId:data?.production_job_id||null}:p);setProposals(nextProposals);try{localStorage.setItem('msp_proposals',JSON.stringify(nextProposals))}catch{}if(q.cloud){const quotePayload={...q,statusAt:approvedAt,cloudOrderId:data?.order_id||null,productionJobId:data?.production_job_id||null};for(const k of ['id','dbId','cloud','folio','status','total','clientId','createdAt','createdBy','sourceKey'])delete quotePayload[k];const quoteUpdate=await supabase.from('quotes').update({status:'Aprobado',payload:quotePayload}).eq('id',q.id).eq('tenant_id',tenantId);if(quoteUpdate.error)throw quoteUpdate.error}const existingLocal=orders.find(o=>String(o.proposalId)===String(q.id));if(existingLocal){persist('msp_orders',setOrders,orders.map(o=>String(o.proposalId)===String(q.id)?{...o,cloudOrderId:data?.order_id||o.cloudOrderId||null,productionJobId:data?.production_job_id||o.productionJobId||null,status:o.status||'Nuevo'}:o))}else{const o={id:data?.order_id||Date.now(),cloudOrderId:data?.order_id||null,productionJobId:data?.production_job_id||null,folio:orderFolio,proposalId:q.id,productId:q.productId||null,clientId:q.clientId,clientName:q.clientName,product:q.product,qty:q.qty,total:q.total,status:'Nuevo',createdAt:approvedAt};persist('msp_orders',setOrders,[o,...orders])}await loadProduction(tenantId);notify(data?.duplicate?'Pedido ya existente; producción sincronizada':'Cotización aprobada · pedido enviado a Producción');return data}catch(e){console.error(e);notify(e.message||'No se pudo aprobar la cotización')}finally{setCloudBusy(false)}};
- const approve=async id=>{const q=proposals.find(p=>p.id===id);if(!q)return;if(q.status==='Aprobado'&&orders.some(o=>String(o.proposalId)===String(id)&&o.cloudOrderId))return notify('Esta cotización ya está aprobada y en Producción');return createProductionOrder(q)};
- const duplicateProposal=async q=>{const now=Date.now(),folio='COT-'+String(now).slice(-6),copy={...q,id:now,folio,createdAt:new Date(now).toISOString(),status:'Borrador',version:Number(q.version||1)+1,parentId:q.parentId||q.id,cloudOrderId:null,productionJobId:null,cloud:false};if(q.cloud&&session?.user&&tenantId){const payload={...copy};for(const k of ['id','dbId','cloud','folio','status','total','clientId','createdAt','createdBy','sourceKey'])delete payload[k];const{data,error}=await supabase.from('quotes').insert({tenant_id:tenantId,customer_id:q.clientId||null,created_by:session.user.id,folio,status:'Borrador',total:Number(q.total||0),payload,source_key:'version:'+crypto.randomUUID()}).select('id,customer_id,created_by,folio,status,total,payload,created_at,source_key').single();if(error)return notify(error.message||'No se pudo duplicar');setProposals(v=>[quoteFromCloud(data),...v]);notify('Nueva versión compartida');return}persist('msp_proposals',setProposals,[copy,...proposals]);notify('Nueva versión creada')};const deleteProposal=async id=>{if(orders.some(o=>String(o.proposalId)===String(id)))return notify('Propuesta ligada a pedido: no se puede eliminar');if(!confirm('¿Eliminar esta propuesta?'))return;const target=proposals.find(q=>q.id===id);if(target?.cloud&&session?.user&&tenantId){const{error}=await supabase.from('quotes').delete().eq('id',id).eq('tenant_id',tenantId);if(error)return notify(error.message||'No se pudo eliminar');setProposals(v=>v.filter(q=>q.id!==id));notify('Cotización eliminada de la empresa');return}persist('msp_proposals',setProposals,proposals.filter(q=>q.id!==id));notify('Propuesta eliminada')};
- const allowedOrderTransitions={Nuevo:['Producción'],Producción:['Listo'],Listo:['Entregado'],Entregado:[]};const changeOrderStatus=(id,status)=>{const current=orders.find(o=>o.id===id);if(!current)return;if(!allowedOrderTransitions[current.status]?.includes(status))return notify('Avanza el pedido siguiendo el flujo de producción');persist('msp_orders',setOrders,orders.map(o=>o.id===id?{...o,status,statusAt:new Date().toISOString()}:o));notify('Pedido: '+status)};
- const makeOrder=async q=>{if(q.status!=='Aprobado')return notify('Primero aprueba la cotización');if(orders.some(o=>String(o.proposalId)===String(q.id)&&o.cloudOrderId))return notify('Este pedido ya existe y está en Producción');return createProductionOrder(q)};
- const approveAndOrder=async id=>approve(id);
- const proposalText=()=>{const c=clients.find(z=>String(z.id)===String(selectedClient));return `Hola ${c?.name||''}. Te compartimos una propuesta de ${company.name} realizada con MockuPro.\n\nProducto: ${product.name}\nCantidad: ${qty} piezas\nÁrea: ${placement}\nTotal: $${total.toFixed(2)} MXN\n\nLa imagen corresponde a una vista previa y no constituye arte final de producción.\n\nQuedamos atentos a tu aprobación o cambios.`};const share=()=>{const c=clients.find(z=>String(z.id)===String(selectedClient)),phone=(c?.phone||'').replace(/\D/g,'');if(!c){notify('Selecciona un cliente antes de enviar');return}if(!phone){notify('El cliente no tiene teléfono registrado');return}window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(proposalText()),'_blank')};const emailShare=()=>{const c=clients.find(z=>String(z.id)===String(selectedClient));if(!c){notify('Selecciona un cliente antes de enviar');return}if(!c.email){notify('El cliente no tiene correo registrado');return}window.location.href='mailto:'+c.email+'?subject='+encodeURIComponent('Propuesta '+product.name+' | '+company.name)+'&body='+encodeURIComponent(proposalText())};
- const escHtml=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- const printQuote=()=>{const w=window.open('','_blank');if(!w)return;const c=clients.find(z=>String(z.id)===String(selectedClient));const html=`<!doctype html><meta charset="utf-8"><title>Cotización MockuPro</title><style>body{font-family:Arial;padding:40px;color:#101828;max-width:900px;margin:auto}.head{background:#07111f;color:white;padding:24px;border-radius:16px}.pro{color:#1597ff}.preview{margin:24px 0;padding:24px;border:1px solid #dbe2ea;border-radius:16px;text-align:center}.mockproduct{position:relative;width:360px;height:300px;max-width:100%;margin:0 auto 14px;background:${escHtml(productColor)};border-radius:16px;overflow:hidden}.mockproduct .base{position:absolute;inset:7%;width:86%;height:86%;object-fit:${fitMode==='cover'?'cover':'contain'};object-position:${Number(photoX)}% ${Number(photoY)}%}.mockproduct .clientlogo{position:absolute;width:${Number(size)}%;left:${Number(x)}%;top:${Number(y)}%;max-height:45%;object-fit:contain;opacity:${Number(logoOpacity)/100};mix-blend-mode:${escHtml(blendMode)};transform:translate(-50%,-50%) rotate(${Number(rotation)}deg) skewX(${Number(skewX)}deg) skewY(${Number(skewY)}deg)}table{width:100%;border-collapse:collapse;margin:25px 0}td{padding:10px;border-bottom:1px solid #ddd}.total{text-align:right;font-size:24px}.warn{color:#b42318;font-weight:bold}</style><div class="head"><h1>Mocku<span class="pro">Pro</span></h1><div>DISEÑA | COTIZA | VENDE</div><h2>${escHtml(company.name)}</h2><p>${escHtml([company.phone,company.email].filter(Boolean).join(' · '))}</p></div><h2>Propuesta visual y cotización</h2><p>Cliente: ${escHtml(c?.name||'Sin asignar')}</p><p style="color:#667085">Preparada con MockuPro · presentación comercial profesional</p><div class="preview">${logo?`<div class="mockproduct">${product.image?`<img class="base" src="${escHtml(new URL(product.image,location.href).href)}">`:''}<img class="clientlogo" src="${escHtml(logo)}"></div><p>${escHtml(product.name)} · ${escHtml(placement)}</p><small class="warn">VISTA PREVIA · NO IMPRIMIR</small>`:'<p>Sin mockup cargado</p>'}</div><table><tr><td>Producto</td><td>${escHtml(product.name)}</td></tr><tr><td>Cantidad</td><td>${qty}</td></tr><tr><td>Precio unitario</td><td>$${Number(product.price).toFixed(2)}</td></tr><tr><td>Descuento</td><td>${discount}%</td></tr></table><p class="total"><b>Total $${total.toFixed(2)} MXN</b></p><small>Propuesta comercial. La vista previa no constituye arte final de producción.</small>`;w.document.write(html);w.document.close();w.print()};
- const exportPreview=()=>{if(!logo)return notify('Carga un logo primero');const esc=v=>String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])),px=(x-size/2)*12,py=(y-size/2)*8,pw=size*12,ph=size*8,cx=px+pw/2,cy=py+ph/2,base=product.image?'<image href="'+esc(product.image)+'" x="70" y="105" width="1060" height="600" preserveAspectRatio="xMidYMid '+(fitMode==='cover'?'slice':'meet')+'"/>':'';const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800"><rect width="100%" height="100%" fill="${esc(productColor)}"/>${base}<rect x="70" y="105" width="1060" height="600" fill="none" stroke="#d8e0e8"/><text x="600" y="48" text-anchor="middle" font-family="Arial" font-size="28" font-weight="bold">${esc(product.name)}</text><text x="600" y="78" text-anchor="middle" font-family="Arial" font-size="16">${esc(placement)} · MockuPro</text><image href="${esc(logo)}" x="${px}" y="${py}" width="${pw}" height="${ph}" preserveAspectRatio="xMidYMid meet" opacity="${logoOpacity/100}" style="mix-blend-mode:${esc(blendMode)}" transform="rotate(${rotation} ${cx} ${cy}) skewX(${skewX}) skewY(${skewY})"/><text x="600" y="760" text-anchor="middle" font-family="Arial" font-size="16" fill="#52667a">VISTA PREVIA · NO IMPRIMIR</text></svg>`;const url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'})),a=document.createElement('a');a.href=url;a.download='mockup-'+product.name.toLowerCase().replace(/[^a-z0-9]+/g,'-')+'.svg';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);notify('Mockup exportado con producto y diseño')}; const daysSince=v=>{if(!v)return 0;const t=new Date(v).getTime();return Number.isFinite(t)?Math.max(0,Math.floor((Date.now()-t)/86400000)):0};const needsFollowUp=q=>q.status==='Enviada'&&daysSince(q.statusAt||q.createdAt)>=2;const quoteStatuses=['Todos','Borrador','Enviada','Cambios solicitados','Aprobado'];const statusCounts=quoteStatuses.slice(1).reduce((a,v)=>(a[v]=proposals.filter(q=>q.status===v).length,a),{});const proposalGroups=proposals.reduce((a,q)=>{const k=String(q.parentId||q.id);(a[k]||(a[k]=[])).push(q);return a},{}); const filteredClients=clients.filter(c=>(c.name+' '+(c.phone||'')+' '+(c.email||'')).toLowerCase().includes(search.toLowerCase())),filteredProducts=products.filter(p=>category==='Todos'||p.category===category),filteredProposals=proposals.filter(q=>(q.product+' '+(q.clientName||'')).toLowerCase().includes(search.toLowerCase())),visibleProposals=quoteFilter==='Todos'?filteredProposals:filteredProposals.filter(q=>q.status===quoteFilter);
- const roleModules={tenant_admin:modules,salesperson:modules.filter(([n])=>!['Producción','Admin'].includes(n)),catalog_manager:modules.filter(([n])=>['Productos','Catálogos','Mockups'].includes(n)),designer:modules.filter(([n])=>['Clientes','Productos','Catálogos','Mockups','Cotizaciones','Pedidos'].includes(n)),production:modules.filter(([n])=>['Productos','Catálogos','Pedidos','Producción'].includes(n))};
- const visibleModules=session?.user?(roleModules[currentRole]||[]):modules;
- useEffect(()=>{if(session?.user&&currentRole&&active!=='Inicio'&&!visibleModules.some(([name])=>name===active))setActive('Inicio')},[active,currentRole,session?.user?.id]);
- return <div className={'app role-'+(currentRole||'local')}><aside><div className="brandlogo"><div className="brandmark"><span className="brandM">M</span><span className="brandBox">⌁</span><span className="brandName">Mocku<b>Pro</b></span></div><div className="brandBy">by Collector Labs</div><div className="brandTag">DISEÑA · COTIZA · VENDE</div><small>De la idea a la venta.</small></div><nav><button onClick={()=>setActive('Inicio')}><Home size={18}/>Inicio</button>{visibleModules.map(([n,I])=><button key={n} onClick={()=>setActive(n)}><I size={18}/>{n}</button>)}</nav></aside><main>{notice&&<div className="notice">{notice}</div>}<header><div><small>{company.name}{currentRole?' · '+roleLabel(currentRole):''}</small><h1>{active}</h1></div><button className="primary" onClick={()=>setActive('Mockups')}><Plus size={18}/>Nuevo proyecto</button></header>
- {active==='Inicio'&&<><Dashboard clients={clients} proposals={proposals} orders={orders} onNavigate={setActive}/><section className="card company premiumCompany"><h2><Building2 size={25}/> Datos de la empresa</h2><div className="formrow"><input value={company.name} onChange={e=>setCompany({...company,name:e.target.value})} placeholder="Empresa"/><input value={company.phone} onChange={e=>setCompany({...company,phone:e.target.value})} placeholder="WhatsApp"/><input value={company.email} onChange={e=>setCompany({...company,email:e.target.value})} placeholder="Correo"/><button onClick={()=>{localStorage.setItem('msp_company',JSON.stringify(company));notify('Empresa guardada')}}>Guardar empresa</button></div></section></>}
- {active==='Admin'&&<section className="card adminModule"><div className="adminHero"><div><small>ADMINISTRACIÓN DE EMPRESA</small><h2>Equipo y permisos</h2><p>Una empresa puede operar con varios vendedores, diseño y producción sin compartir cuentas.</p></div><span>{roleLabel(currentRole)||'Sin rol'}</span></div>{currentRole!=='tenant_admin'?<div className="restrictedPanel"><ShieldCheck size={28}/><b>Área exclusiva del administrador</b><p>Tu rol actual es {roleLabel(currentRole)||'usuario'}.</p></div>:<><div className="inviteTeam"><input type="email" placeholder="Correo del nuevo integrante" value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)}/><select value={inviteRole} onChange={e=>setInviteRole(e.target.value)}><option value="salesperson">Vendedor</option><option value="catalog_manager">Encargado de catálogos</option><option value="designer">Diseño / Mockups</option><option value="production">Producción</option><option value="tenant_admin">Administrador</option></select><button className="primary" disabled={adminBusy} onClick={inviteTeamMember}>{adminBusy?'Procesando…':'Invitar al equipo'}</button></div><div className="teamList">{teamMembers.map(m=><div className="teamRow" key={m.user_id}><div><b>{m.profile?.display_name||m.profile?.email||'Usuario'}</b><small>{m.profile?.email||m.user_id}{m.user_id===session?.user?.id?' · TU CUENTA':''}</small></div><div className="teamRoleActions"><select disabled={adminBusy||m.user_id===session?.user?.id} value={m.role} onChange={e=>changeMemberRole(m.user_id,e.target.value)}><option value="tenant_admin">Administrador</option><option value="catalog_manager">Encargado de catálogos</option><option value="salesperson">Vendedor</option><option value="designer">Diseño / Mockups</option><option value="production">Producción</option></select>{m.user_id!==session?.user?.id&&<button className="dangerlink" disabled={adminBusy} onClick={()=>removeMember(m.user_id)}>Retirar</button>}</div></div>)}</div></>}</section>}
- {active==='Producción'&&<section className="card productionModule"><div className="catalogHeader"><div><h2>Producción</h2><p>Pedido aprobado → proveedor → material → producción → calidad → entrega.</p></div><span className="betaBadge">{canManageProduction?'OPERACIÓN':'SEGUIMIENTO'}</span></div>
- {canManageProduction&&<div className="supplierPanel"><div className="supplierPanelHead"><div><h3>Proveedores</h3><small>Alta rápida para surtir pedidos.</small></div><span>{suppliers.length} activos</span></div><div className="supplierForm"><input placeholder="Proveedor *" value={supplierForm.name} onChange={e=>setSupplierForm({...supplierForm,name:e.target.value})}/><input placeholder="Contacto" value={supplierForm.contact_name} onChange={e=>setSupplierForm({...supplierForm,contact_name:e.target.value})}/><input placeholder="Teléfono" value={supplierForm.phone} onChange={e=>setSupplierForm({...supplierForm,phone:e.target.value})}/><input type="email" placeholder="Correo" value={supplierForm.email} onChange={e=>setSupplierForm({...supplierForm,email:e.target.value})}/><button className="primary" disabled={productionBusy==='supplier'} onClick={addSupplier}>{productionBusy==='supplier'?'Guardando…':'Agregar proveedor'}</button></div>{suppliers.length>0&&<div className="supplierChips">{suppliers.slice(0,12).map(s=><span key={s.id}>{s.name}</span>)}</div>}</div>}
- {productionJobs.length===0?<div className="emptyProduction"><Factory size={34}/><b>No hay trabajos de producción pendientes</b><p>Cuando una cotización se apruebe, su pedido aparecerá automáticamente aquí.</p></div>:<div className="productionQueue">{productionJobs.map(j=>{const d=purchaseDrafts[j.id]||{},pos=purchaseOrders.filter(po=>String(po.order_id)===String(j.order_id)),items=j.orders?.order_items||[];return <article className="productionJobCard" key={j.id}><div className="productionJobTop"><div><b>{j.orders?.folio||('Pedido '+String(j.order_id).slice(0,8))}</b><small>{[j.orders?.payload?.clientName,j.orders?.payload?.productName].filter(Boolean).join(' · ')||'Pedido MockuPro'}</small></div><span className={'productionStatus '+String(j.status).toLowerCase().replace(/\s+/g,'-')}>{j.status}</span></div><div className="productionMeta"><span>{items.reduce((a,i)=>a+Number(i.qty||0),0)||1} pzas</span><span>{'MXN '+Number(j.orders?.total||0).toFixed(2)}</span><span>Prioridad {j.priority}</span></div>{items.length>0&&<div className="productionItems">{items.map(i=><div key={i.id}><b>{i.description}</b><span>{i.qty} pzas</span></div>)}</div>}
- {pos.length>0&&<div className="purchaseOrders">{pos.map(po=><div className="purchaseOrderCard" key={po.id}><div><b>{po.folio}</b><small>{po.suppliers?.name||'Proveedor'} · {po.status}{Number(po.cost_total)>0?' · Costo MXN '+Number(po.cost_total).toFixed(2):''}</small>{po.supplier_reference&&<small>Ref. {po.supplier_reference}</small>}</div>{canManageProduction&&<div className="purchaseActions">{po.status==='Solicitado'&&<><button disabled={productionBusy===po.id} onClick={()=>updateSupplierOrder(po,'Confirmado')}>Confirmar</button><button disabled={productionBusy===po.id} onClick={()=>updateSupplierOrder(po,'Parcial')}>Parcial</button><button className="primary" disabled={productionBusy===po.id} onClick={()=>updateSupplierOrder(po,'Recibido')}>Recibido</button></>}{po.status==='Confirmado'&&<><button disabled={productionBusy===po.id} onClick={()=>updateSupplierOrder(po,'Parcial')}>Parcial</button><button className="primary" disabled={productionBusy===po.id} onClick={()=>updateSupplierOrder(po,'Recibido')}>Recibido</button></>}{po.status==='Parcial'&&<button className="primary" disabled={productionBusy===po.id} onClick={()=>updateSupplierOrder(po,'Recibido')}>Completar recepción</button>}</div>}</div>)}</div>}
- {canManageProduction&&<div className="productionActions">{j.status==='Pendiente'&&<button className="primary" disabled={productionBusy===j.id} onClick={()=>advanceProduction(j,'Revisión')}>Revisar pedido</button>}{j.status==='Revisión'&&<><div className="supplierOrderForm"><select value={d.supplierId||''} onChange={e=>updatePurchaseDraft(j.id,{supplierId:e.target.value})}><option value="">Seleccionar proveedor…</option>{suppliers.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select><input type="number" min="0" step=".01" placeholder="Costo proveedor (opcional)" value={d.costTotal||''} onChange={e=>updatePurchaseDraft(j.id,{costTotal:e.target.value})}/><input placeholder="Referencia / cotización proveedor" value={d.reference||''} onChange={e=>updatePurchaseDraft(j.id,{reference:e.target.value})}/><input type="datetime-local" value={d.expectedAt||''} onChange={e=>updatePurchaseDraft(j.id,{expectedAt:e.target.value})}/><button disabled={productionBusy===j.id||!d.supplierId} onClick={()=>createSupplierOrder(j)}>Solicitar a proveedor</button></div><button className="primary" disabled={productionBusy===j.id} onClick={()=>advanceProduction(j,'En producción')}>Usar stock / iniciar producción</button></>}{j.status==='Material recibido'&&<button className="primary" disabled={productionBusy===j.id} onClick={()=>advanceProduction(j,'En producción')}>Iniciar producción</button>}{j.status==='En producción'&&<button className="primary" disabled={productionBusy===j.id} onClick={()=>advanceProduction(j,'Control calidad')}>Enviar a control de calidad</button>}{j.status==='Control calidad'&&<><button disabled={productionBusy===j.id} onClick={()=>advanceProduction(j,'En producción')}>Regresar a producción</button><button className="primary" disabled={productionBusy===j.id} onClick={()=>advanceProduction(j,'Listo')}>Marcar listo</button></>}{j.status==='Listo'&&<button className="primary" disabled={productionBusy===j.id} onClick={()=>advanceProduction(j,'Entregado')}>Confirmar entrega</button>}{j.status==='Detenido'&&<button disabled={productionBusy===j.id} onClick={()=>advanceProduction(j,'Revisión')}>Reabrir revisión</button>}</div>}
- {!canManageProduction&&<div className="sellerProgress"><span>Seguimiento del pedido</span><b>{j.status}</b></div>}</article>})}</div>}</section>}
- {active==='Clientes'&&<section className="card"><h2>Clientes</h2><div className="clientform"><input placeholder="Nombre o empresa *" value={clientForm.name} onChange={e=>setClientForm({...clientForm,name:e.target.value})}/><input placeholder="WhatsApp o teléfono" value={clientForm.phone} onChange={e=>setClientForm({...clientForm,phone:e.target.value})}/><input type="email" placeholder="Correo" value={clientForm.email} onChange={e=>setClientForm({...clientForm,email:e.target.value})}/><button className="primary" onClick={addClient}>Guardar cliente</button></div><input className="search" placeholder="Buscar cliente" value={search} onChange={e=>setSearch(e.target.value)}/><div className="simplelist">{filteredClients.map(c=><div className="row" key={c.id}><div><b>{c.name}</b><small>{[c.phone,c.email].filter(Boolean).join(' · ')||'Sin datos de contacto'}</small></div><div className="actions"><button onClick={()=>{setSelectedClient(String(c.id));setActive('Mockups')}}>Nuevo proyecto</button><button onClick={()=>deleteClient(c.id)}>Eliminar</button></div></div>)}</div></section>}
- {active==='Productos'&&<section className="card"><div className="catalogSync"><h2>Catálogo</h2><span className={cloudReady?'syncOk':cloudBusy?'syncBusy':'syncLocal'}>{session?(cloudBusy?'☁ Sincronizando…':cloudReady?'☁ Catálogo sincronizado':'☁ Conectando…'):'◌ Modo local'}</span></div>{cloudError&&<small className="cloudError">{cloudError}</small>}<div className="productform"><input placeholder="Nombre del producto *" value={productForm.name} onChange={e=>setProductForm({...productForm,name:e.target.value})}/><input placeholder="Categoría" value={productForm.category} onChange={e=>setProductForm({...productForm,category:e.target.value})}/><input type="number" min="0" step="0.01" placeholder="Precio base *" value={productForm.price} onChange={e=>setProductForm({...productForm,price:e.target.value})}/><input placeholder="URL de imagen/template (opcional)" value={productForm.image.startsWith("data:")?"Foto cargada":productForm.image} onChange={e=>setProductForm({...productForm,image:e.target.value})}/><label className="photoUpload"><Upload size={16}/> Subir foto real<input type="file" accept="image/png,image/jpeg,image/webp" onChange={uploadProductPhoto}/></label>{productForm.image&&<div className="productPhotoPreview"><img src={productForm.image} alt="Vista previa del producto"/><div><b>Foto del producto</b><small>{productPhotoMeta?productPhotoMeta.width+' × '+productPhotoMeta.height+' px · '+Math.round(productPhotoMeta.bytes/1024)+' KB':'Revisa encuadre y fondo antes de guardar'}</small><span className={productPhotoMeta&&(productPhotoMeta.width<900||productPhotoMeta.height<900)?'qualitywarn':'qualityok'}>{productPhotoMeta&&(productPhotoMeta.width<900||productPhotoMeta.height<900)?'Resolución aceptable, pero no ideal':'Lista para catálogo'}</span></div></div>}<div className="aiProduct"><div><b>✨ Preparar con IA</b><small>Limpia el fondo y convierte tu foto en imagen de catálogo sin alterar el producto.</small></div><select value={aiPreset} onChange={e=>setAiPreset(e.target.value)}><option value="studio">Estudio premium oscuro</option><option value="white">Catálogo blanco</option><option value="transparent">Fondo transparente</option></select><button type="button" className="aiButton" disabled={aiBusy||!productForm.image?.startsWith('data:image/')} onClick={prepareProductAI}>{aiBusy?'Procesando…':'Preparar foto con IA'}</button>{aiOriginal&&productForm.image!==aiOriginal&&<button type="button" onClick={()=>setProductForm(v=>({...v,image:aiOriginal}))}>Usar foto original</button>}<div className="aiAccess">{session?<><small>Sesión IA: {session.user?.email||'vendedor'}</small><button type="button" onClick={()=>supabase.auth.signOut()}>Cerrar sesión</button></>:<><input type="email" placeholder="Correo del vendedor" value={sellerEmail} onChange={e=>setSellerEmail(e.target.value)}/><button type="button" onClick={sendSellerAccess}>Activar acceso IA</button></>}</div></div><select value={productForm.surface} onChange={e=>setProductForm({...productForm,surface:e.target.value})}><option value="fabric">Tela</option><option value="ceramic">Cerámica</option><option value="matte">Mate / rígido</option><option value="paper">Papel</option></select><button className="primary" onClick={addProduct}>Guardar producto</button></div><div className="filters">{['Todos',...new Set(products.map(p=>p.category))].map(c=><button className={category===c?'selected':''} key={c} onClick={()=>setCategory(c)}>{c}</button>)}</div><div className="products">{filteredProducts.map(p=><div className="productcard" key={p.id}><button onClick={()=>{setProduct(p);setActive('Mockups')}}><div className="productvisual">{p.image?<img src={p.image} alt={p.name}/>:<span aria-hidden="true">{p.visual||'◫'}</span>}<span className={'assetbadge '+(isPhotoAsset(p)?'photo':'template')}>{isPhotoAsset(p)?'FOTO':'PLANTILLA'}</span></div><b>{p.name}</b><span>{p.category}</span><strong>{'$'+Number(p.price||0).toFixed(2)}</strong><small>Crear mockup →</small></button><div className="productCardActions"><label className="replacePhotoBtn">Cambiar foto<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>replaceProductPhoto(p.id,e)}/></label><button className="dangerlink" onClick={()=>deleteProduct(p.id)}>Eliminar</button></div></div>)}</div></section>}
- {active==='Catálogos'&&<section className="card catalogModule"><div className="catalogHeader"><div><h2>Catálogos PDF</h2><p>Un catálogo se carga una vez y queda disponible para todos los vendedores de la empresa.</p></div><span className="betaBadge">{session?.user?'NUBE':'LOCAL'}</span></div>
- {session?.user&&<div className="catalogCloudNote"><b>Catálogo compartido por empresa</b><span>{canManageCatalogs?'Puedes publicar, reemplazar, archivar y eliminar catálogos.':'Puedes consultar todos los catálogos activos de tu empresa.'}</span></div>}
- {canManageCatalogs&&<div className="catalogUpload"><input placeholder="Marca o proveedor * (ej. Yazbek, BIC, Promoline)" value={catalogBrand} onChange={e=>setCatalogBrand(e.target.value)}/><label className={'catalogPdfButton '+(catalogBusy?'disabled':'')}><Upload size={17}/>{catalogBusy?'Procesando…':'Subir / actualizar PDF'}<input type="file" accept="application/pdf,.pdf" disabled={catalogBusy} onChange={indexCatalogPdf}/></label></div>}{catalogProgress&&<div className="catalogProgress">{catalogProgress}</div>}
- <div className="catalogSearchBox"><input placeholder="Buscar por marca, modelo, ID, SKU, nombre o palabra clave…" value={catalogQuery} onChange={e=>setCatalogQuery(e.target.value)}/><small>{catalogSearchBusy?'Buscando en los catálogos de la empresa…':'Ejemplos: Yazbek 0200 · BIC 102 · taza 11 oz · llavero K45'}</small></div>
- {catalogQuery.trim()?<div className="catalogResults"><div className="catalogResultSummary"><b>{catalogResults.length}</b> coincidencias {session?.user?'en catálogos activos compartidos':'en catálogos locales'}</div>{catalogResults.length===0&&!catalogSearchBusy?<p>No encontré coincidencias. Prueba con el número exacto de modelo, marca o una palabra del producto.</p>:catalogResults.map((r,i)=><button key={r.catalogId+'-'+r.page+'-'+i} className="catalogHit catalogHitVisual" onClick={()=>openCatalogPage(r)}>{r.pageImageUrl&&<img src={r.pageImageUrl} alt={'Página '+r.page+' de '+r.catalogName}/>}<div className="catalogHitCopy"><div><b>{r.brand} · {r.catalogName}</b><span>Página {r.page}</span></div><p>{catalogSnippet(r.text,catalogQuery)}</p><small>Abrir PDF directamente en esta página →</small></div></button>)}</div>:<div className="catalogLibrary"><h3>Biblioteca de catálogos</h3>{catalogs.length===0?<p>Aún no hay catálogos compartidos. El administrador o encargado de catálogos puede cargar el primero.</p>:catalogs.map(cat=><div className={'catalogRow '+(cat.status||'active')} key={cat.id}><div><b>{cat.brand}</b><span>{cat.name}</span><small>{cat.totalPages||0} páginas · {(Number(cat.bytes||0)/1024/1024).toFixed(1)} MB · {cat.status==='active'?'ACTIVO':cat.status==='archived'?'ARCHIVADO':String(cat.status||'').toUpperCase()}</small></div><div className="actions"><button onClick={()=>openCatalogPage({...cat,page:1})}>Abrir PDF</button>{canManageCatalogs&&cat.status==='active'&&<button onClick={()=>archiveCatalog(cat.id)}>Archivar</button>}{canManageCatalogs&&<button className="dangerlink" onClick={()=>removeCatalog(cat.id)}>Eliminar</button>}</div></div>)}</div>}</section>}
- {active==='Mockups'&&<><section className="grid"><div className="card"><h2>Editor de mockup</h2><label>Cliente<select value={selectedClient} onChange={e=>setSelectedClient(e.target.value)}><option value="">Sin asignar</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Área de personalización<select value={placement} onChange={e=>choosePlacement(e.target.value)}>{productPlacements(product).map(v=><option key={v}>{v}</option>)}</select></label><label className="drop"><Upload/><b>Cargar logo</b><input type="file" accept="image/*,.svg" onChange={upload}/></label><select value={product.id} onChange={e=>{const p=products.find(z=>String(z.id)===e.target.value)||products[0];setProduct(p);setPlacement('Frente');const d=productPreset(p,'Frente');setX(d[0]);setY(d[1]);setSize(d[2]);setSkewX(d[3]);setSkewY(d[4]);setBlendMode(d[5])}}>{products.map(z=><option value={z.id} key={z.id}>{z.name}</option>)}</select><label>Tamaño<input type="range" min="10" max="75" value={size} onChange={e=>setSize(Number(e.target.value))}/></label><label>Horizontal<input type="range" min="10" max="90" value={x} onChange={e=>setX(Number(e.target.value))}/></label><label>Vertical<input type="range" min="15" max="85" value={y} onChange={e=>setY(Number(e.target.value))}/></label><label>Rotación {rotation}°<input type="range" min="-30" max="30" value={rotation} onChange={e=>setRotation(Number(e.target.value))}/></label><label>Integración con superficie <b>{realism}%</b><input type="range" min="0" max="100" value={realism} onChange={e=>setRealism(Number(e.target.value))}/></label><label>Perspectiva horizontal {skewX}°<input type="range" min="-18" max="18" value={skewX} onChange={e=>setSkewX(Number(e.target.value))}/></label><label>Perspectiva vertical {skewY}°<input type="range" min="-12" max="12" value={skewY} onChange={e=>setSkewY(Number(e.target.value))}/></label><label>Opacidad de impresión <b>{logoOpacity}%</b><input type="range" min="55" max="100" value={logoOpacity} onChange={e=>setLogoOpacity(Number(e.target.value))}/></label><label>Ajuste de fotografía<select value={fitMode} onChange={e=>setFitMode(e.target.value)}><option value="contain">Producto completo</option><option value="cover">Llenar encuadre</option></select></label><label>Foto horizontal<input type="range" min="0" max="100" value={photoX} onChange={e=>setPhotoX(Number(e.target.value))}/></label><label>Foto vertical<input type="range" min="0" max="100" value={photoY} onChange={e=>setPhotoY(Number(e.target.value))}/></label><label>Presentación<select value={viewMode} onChange={e=>setViewMode(e.target.value)}><option>Estudio</option><option>Catálogo</option><option>Cliente</option></select></label><label>Zoom de producto <b>{Math.round(zoom*100)}%</b><input type="range" min="80" max="125" value={Math.round(zoom*100)} onChange={e=>setZoom(Number(e.target.value)/100)}/></label><label>Modo de impresión<select value={blendMode} onChange={e=>setBlendMode(e.target.value)}><option value="multiply">Tinta / serigrafía</option><option value="normal">Vinil / transfer</option><option value="overlay">Integrado a textura</option></select></label><label>Color del producto<input type="color" value={productColor} onChange={e=>setProductColor(e.target.value)}/></label><label>Notas del cliente<textarea rows="3" value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Ej. logo más pequeño, entrega viernes..."/></label><button className="primary" onClick={saveProposal}>Guardar propuesta</button><button onClick={resetEditor}>Restablecer editor</button><button onClick={exportPreview} disabled={!logo}>Exportar vista previa</button><button onClick={share}><Send size={16}/>WhatsApp</button><button onClick={emailShare}>Correo</button></div><div className={"card previewcard"+(presentation?" presentation":"")}><h2>Vista previa</h2><div className="dragtip">Arrastra el logo directamente sobre el producto. También funciona con el dedo. Para venta usa fotos reales, bien iluminadas y de preferencia de 900 px o más; la perspectiva ahora se aplica también al logo final.</div><div className="mockactions"><button className="comparebtn" onClick={()=>setCompare(v=>!v)}>{compare?'Ocultar comparación':'Comparar antes / después'}</button><button className={'comparebtn '+(favorite?'selected':'')} onClick={()=>{setFavorite(v=>!v);notify(favorite?'Propuesta desmarcada':'Propuesta destacada para presentar')}}>{favorite?'★ Seleccionada':'☆ Destacar propuesta'}</button></div>{compare&&<div className="comparepanel"><div><b>ANTES</b>{product.image?<img src={product.image} alt={'Producto sin personalizar '+product.name}/>:<span>Sin foto</span>}</div><div><b>PROPUESTA</b>{product.image?<img src={product.image} alt={'Producto personalizado '+product.name}/>:null}{logo&&<img className="comparelogo" src={logo} alt="Logo aplicado" style={{width:size+'%',left:x+'%',top:y+'%',opacity:logoOpacity/100,mixBlendMode:blendMode,transform:'translate(-50%,-50%) rotate('+rotation+'deg) skew('+skewX+'deg,'+skewY+'deg)'}}/>}</div></div>}<button className="presentbtn" onClick={()=>setPresentation(!presentation)}>{presentation?"Cerrar presentación":"Presentar al cliente"}</button>{presentation&&<><div className="presentbrand"><img src="./mockupro-logo.svg" alt="MockuPro"/><span>Propuesta visual</span></div><div className="presentactions"><button onClick={share}>Enviar por WhatsApp</button><button onClick={printQuote}>Cotización / PDF</button></div><div className="presenthint">¿Te gusta esta propuesta? Registra la respuesta del cliente aquí.</div><div className="clientdecision"><button onClick={()=>{const q=proposals.find(p=>String(p.clientId)===String(selectedClient)&&p.productId===product.id);if(!q)return notify('Guarda primero la propuesta');approveAndOrder(q.id)}}>✓ Aprobar y crear pedido</button><button onClick={()=>{const q=proposals.find(p=>String(p.clientId)===String(selectedClient)&&p.productId===product.id);if(!q)return notify('Guarda primero la propuesta');setProposalStatus(q.id,'Cambios solicitados')}}>↻ Solicita cambios</button></div><div className="presentmeta"><div><small>CLIENTE</small><b>{clients.find(c=>String(c.id)===String(selectedClient))?.name||"Cliente"}</b></div><div><small>PRODUCTO</small><b>{product.name}</b></div><div><small>CANTIDAD</small><b>{qty} pzas</b></div><div><small>TOTAL</small><b>${total.toFixed(2)} MXN</b></div></div></>}<div className={'mock surface-'+(product.surface||'matte')+' view-'+viewMode.toLowerCase()+' asset-'+(isPhotoAsset(product)?'photo':'template')} style={{background:productColor}}><div className="studio-light" aria-hidden="true"/><div className="productname">{product.name}</div><div className="realbadge">{viewMode==='Cliente'?'PROPUESTA PARA CLIENTE':'PREVISUALIZACIÓN REALISTA'}</div>{product.image&&<img className="productbase" src={product.image} alt={product.name} style={{transform:'scale('+zoom+')',objectFit:fitMode,objectPosition:photoX+'% '+photoY+'%'}}/>} {product.surface==='fabric'&&<div className="printzone" aria-hidden="true"><span>ÁREA DE IMPRESIÓN</span></div>} {logo?<><img className="logo-shadow" src={logo} aria-hidden="true" style={{width:size+'%',left:x+'%',top:y+'%',opacity:(realism/100)*.22,filter:'blur('+(realism/55)+'px)',transform:'translate(-50%,-50%) rotate('+rotation+'deg) skew('+skewX+'deg,'+skewY+'deg)'}}/><img className={"customerlogo draggablelogo"+(dragging?" dragging":"")} src={logo} alt="Logo del cliente; arrastra para posicionar" draggable="false" onPointerDown={startLogoDrag} onPointerMove={dragLogo} onPointerUp={stopLogoDrag} onPointerCancel={stopLogoDrag} style={{width:size+'%',left:x+'%',top:y+'%',opacity:logoOpacity/100,mixBlendMode:blendMode,filter:'contrast('+(1-realism*.00045)+') saturate('+(1-realism*.0007)+') drop-shadow(0 1px '+(1+realism/80)+'px rgba(15,23,42,'+(realism*.002)+'))',transform:'translate(-50%,-50%) rotate('+rotation+'deg) skew('+skewX+'deg,'+skewY+'deg)'}}/></>:<span>LOGO</span>}<small>VISTA PREVIA · NO IMPRIMIR</small></div></div></section><section className="card"><h2>Historial</h2><input className="search" placeholder="Buscar propuesta" value={search} onChange={e=>setSearch(e.target.value)}/>{visibleProposals.map(q=><div className="row" key={q.id}><div><b>{q.product}</b><small>{(q.folio||'Cotización')+' · '}</small><small>{q.qty+' pzas · '+(q.clientName||'Sin asignar')+' · '+(q.placement||'Frente')+' · v'+Number(q.version||1)+' · $'+Number(q.total||0).toFixed(2)+' · '+q.status+' · '+(q.createdAt?new Date(q.createdAt).toLocaleDateString('es-MX'):'')+(q.favorite?' · ★ DESTACADA':'')+(proposalGroups[String(q.parentId||q.id)]?.length>1?' · '+proposalGroups[String(q.parentId||q.id)].length+' VERSIONES':'')+(needsFollowUp(q)?' · REQUIERE SEGUIMIENTO':'')}</small></div><div className="actions"><button onClick={()=>loadProposal(q)}>Abrir en editor</button><button onClick={()=>duplicateProposal(q)}>Duplicar versión</button>{q.status==='Borrador'&&<button onClick={()=>setProposalStatus(q.id,'Enviada')}>Marcar enviada</button>}{q.status==='Enviada'&&<button onClick={()=>setProposalStatus(q.id,'Cambios solicitados')}>Cambios</button>}{needsFollowUp(q)&&<button onClick={()=>{setSelectedClient(String(q.clientId||''));setProduct(products.find(p=>String(p.id)===String(q.productId))||product);setQty(q.qty||1);setActive('Cotizaciones');notify('Cotización preparada para seguimiento')}}>Dar seguimiento</button>}{q.status!=='Aprobado'&&<button onClick={()=>approve(q.id)}>Aprobar</button>}{q.status==='Aprobado'&&<button onClick={()=>makeOrder(q)}>Crear pedido</button>}<button onClick={()=>deleteProposal(q.id)}>Eliminar</button></div></div>)}</section></>}
- {active==='Cotizaciones'&&<section className="card"><h2>Cotización</h2><div className="statusfilters">{quoteStatuses.map(v=><button key={v} className={quoteFilter===v?'activefilter':''} onClick={()=>setQuoteFilter(v)}>{v}{v!=='Todos'?' ('+(statusCounts[v]||0)+')':''}</button>)}</div><div className="quotecontrols"><label>Cantidad<input type="number" min="1" value={qty} onChange={e=>setQty(Math.max(1,Number(e.target.value)||1))}/></label><label>Descuento %<input type="number" min="0" max="100" value={discount} onChange={e=>setDiscount(Math.min(100,Math.max(0,Number(e.target.value)||0)))}/></label></div><p>{'Subtotal: $'+subtotal.toFixed(2)}</p><h3>{'Total: $'+total.toFixed(2)+' MXN'}</h3><button onClick={share}>Enviar propuesta por WhatsApp</button><button onClick={emailShare}>Enviar propuesta por correo</button><button onClick={printQuote}>Cotización + mockup / PDF</button></section>}
- {active==='Pedidos'&&<section className="card"><h2>Pedidos</h2>{orders.length===0?<p>Aprueba una propuesta para convertirla en pedido.</p>:orders.map(o=><div className="row" key={o.id}><div><b>{o.product}</b><small>{(o.folio||'Pedido')+' · '+o.qty+' pzas · '+(o.clientName||'Sin asignar')+' · $'+Number(o.total||0).toFixed(2)}</small></div><select disabled={!!o.cloudOrderId} title={o.cloudOrderId?'El estado real lo controla Producción':'Pedido local'} value={o.status} onChange={e=>changeOrderStatus(o.id,e.target.value)}>{['Nuevo','Producción','Listo','Entregado'].map(v=><option key={v} disabled={v!==o.status&&!allowedOrderTransitions[o.status]?.includes(v)}>{v}</option>)}</select></div>)}</section>}
- </main></div>
+export default function App() {
+  const [active, setActive] = useState("Inicio"),
+    [search, setSearch] = useState(""),
+    [category, setCategory] = useState("Todos"),
+    [productColor, setProductColor] = useState("#eef2f6"),
+    [rotation, setRotation] = useState(0),
+    [placement, setPlacement] = useState("Frente"),
+    [notes, setNotes] = useState(""),
+    [selectedClient, setSelectedClient] = useState(""),
+    [notice, setNotice] = useState("");
+  const [aiPreset, setAiPreset] = useState("studio"),
+    [aiBusy, setAiBusy] = useState(false),
+    [aiOriginal, setAiOriginal] = useState(""),
+    [session, setSession] = useState(null),
+    [sellerEmail, setSellerEmail] = useState(""),
+    [tenantId, setTenantId] = useState(""),
+    [currentRole, setCurrentRole] = useState(""),
+    [teamMembers, setTeamMembers] = useState([]),
+    [inviteEmail, setInviteEmail] = useState(""),
+    [inviteRole, setInviteRole] = useState("salesperson"),
+    [adminBusy, setAdminBusy] = useState(false),
+    [productionJobs, setProductionJobs] = useState([]),
+    [suppliers, setSuppliers] = useState([]),
+    [purchaseOrders, setPurchaseOrders] = useState([]),
+    [supplierForm, setSupplierForm] = useState({
+      name: "",
+      contact_name: "",
+      phone: "",
+      email: "",
+    }),
+    [purchaseDrafts, setPurchaseDrafts] = useState({}),
+    [productionBusy, setProductionBusy] = useState(""),
+    [cloudReady, setCloudReady] = useState(false),
+    [cloudBusy, setCloudBusy] = useState(false),
+    [cloudError, setCloudError] = useState("");
+  const [company, setCompany] = useState(() =>
+      load("msp_company", { name: "EMPRESA DEMO", phone: "", email: "" }),
+    ),
+    [clients, setClients] = useState(() => load("msp_clients", [])),
+    [products, setProducts] = useState(loadProducts),
+    [product, setProduct] = useState(
+      () => loadProducts()[0] || demoProducts[0],
+    );
+  const [logo, setLogo] = useState(""),
+    [size, setSize] = useState(35),
+    [x, setX] = useState(50),
+    [y, setY] = useState(50),
+    [dragging, setDragging] = useState(false),
+    [realism, setRealism] = useState(82),
+    [logoOpacity, setLogoOpacity] = useState(94),
+    [blendMode, setBlendMode] = useState("multiply"),
+    [zoom, setZoom] = useState(1),
+    [viewMode, setViewMode] = useState("Estudio"),
+    [fitMode, setFitMode] = useState("contain"),
+    [photoX, setPhotoX] = useState(50),
+    [photoY, setPhotoY] = useState(50),
+    [skewX, setSkewX] = useState(0),
+    [skewY, setSkewY] = useState(0),
+    [compare, setCompare] = useState(false),
+    [favorite, setFavorite] = useState(false),
+    [qty, setQty] = useState(1),
+    [discount, setDiscount] = useState(0),
+    [proposals, setProposals] = useState(() => load("msp_proposals", [])),
+    [orders, setOrders] = useState(() => load("msp_orders", [])),
+    [quoteFilter, setQuoteFilter] = useState("Todos"),
+    [presentation, setPresentation] = useState(false),
+    [clientForm, setClientForm] = useState({ name: "", phone: "", email: "" }),
+    [productForm, setProductForm] = useState({
+      name: "",
+      category: "Promocional",
+      price: "",
+      image: "",
+      surface: "matte",
+    }),
+    [productPhotoMeta, setProductPhotoMeta] = useState(null),
+    [catalogs, setCatalogs] = useState([]),
+    [catalogBrand, setCatalogBrand] = useState(""),
+    [catalogQuery, setCatalogQuery] = useState(""),
+    [catalogBusy, setCatalogBusy] = useState(false),
+    [catalogProgress, setCatalogProgress] = useState(""),
+    [catalogSearchResults, setCatalogSearchResults] = useState([]),
+    [catalogSearchBusy, setCatalogSearchBusy] = useState(false);
+  const signedProductUrl = async (path) => {
+    if (!isCloudStoragePath(path)) return path || "";
+    const { data, error } = await supabase.storage
+      .from("product-images")
+      .createSignedUrl(path, 86400);
+    if (error) throw error;
+    return data.signedUrl;
+  };
+  const hydrateCloudProduct = async (row) => ({
+    id: row.legacy_id || row.id,
+    dbId: row.id,
+    name: row.name,
+    category: row.category,
+    price: Number(row.price || 0),
+    image: await signedProductUrl(row.image_url || ""),
+    imagePath: row.image_url || "",
+    surface: row.surface || "matte",
+    imageMeta: row.image_meta || null,
+  });
+  const ensureTenant = async (user) => {
+    const { data: members, error: memberError } = await supabase
+      .from("tenant_members")
+      .select("tenant_id")
+      .eq("user_id", user.id)
+      .limit(1);
+    if (memberError) throw memberError;
+    if (members?.[0]?.tenant_id) return members[0].tenant_id;
+    const slug = "mockupro-" + String(user.id).replace(/-/g, ""),
+      name = (user.email?.split("@")[0] || "Mi empresa") + " · MockuPro";
+    let { data: tenant, error } = await supabase
+      .from("tenants")
+      .insert({ name, slug, created_by: user.id })
+      .select("id")
+      .single();
+    if (error?.code === "23505") {
+      const retry = await supabase
+        .from("tenants")
+        .select("id")
+        .eq("slug", slug)
+        .eq("created_by", user.id)
+        .maybeSingle();
+      tenant = retry.data;
+      error = retry.error;
+    }
+    if (error) throw error;
+    if (!tenant?.id) throw new Error("No se pudo crear la empresa inicial");
+    const member = await supabase
+      .from("tenant_members")
+      .upsert(
+        { tenant_id: tenant.id, user_id: user.id, role: "tenant_admin" },
+        { onConflict: "tenant_id,user_id" },
+      );
+    if (member.error) throw member.error;
+    return tenant.id;
+  };
+  const uploadCloudImage = async (src, tid) => {
+    if (!String(src || "").startsWith("data:image/")) return src || "";
+    const blob = dataUrlToBlob(src),
+      ext =
+        blob.type === "image/png"
+          ? "png"
+          : blob.type === "image/jpeg"
+            ? "jpg"
+            : "webp",
+      path = tid + "/" + crypto.randomUUID() + "." + ext;
+    const { error } = await supabase.storage
+      .from("product-images")
+      .upload(path, blob, {
+        contentType: blob.type,
+        cacheControl: "86400",
+        upsert: false,
+      });
+    if (error) throw error;
+    return path;
+  };
+  const migrateLocalCatalog = async (tid) => {
+    const local = loadProducts();
+    for (const p of local) {
+      let imageRef = p.image || "";
+      if (String(imageRef).startsWith("data:image/"))
+        imageRef = await uploadCloudImage(imageRef, tid);
+      const { error } = await supabase.from("products").insert({
+        tenant_id: tid,
+        name: p.name,
+        category: p.category || "Otros",
+        price: Number(p.price || 0),
+        image_url: imageRef || null,
+        surface: p.surface || "matte",
+        image_meta: p.imageMeta || {},
+        legacy_id: String(p.id),
+      });
+      if (error && error.code !== "23505") throw error;
+    }
+  };
+  const canManageCatalogs =
+    currentRole === "tenant_admin" || currentRole === "catalog_manager";
+  const canManageProducts =
+    !session?.user ||
+    currentRole === "tenant_admin" ||
+    currentRole === "catalog_manager";
+  const canManageClients =
+    !session?.user ||
+    currentRole === "tenant_admin" ||
+    currentRole === "salesperson";
+  const canCreateQuotes =
+    !session?.user ||
+    ["tenant_admin", "salesperson", "designer"].includes(currentRole);
+  const catalogCanvasBlob = (canvas) =>
+    new Promise((resolve, reject) =>
+      canvas.toBlob(
+        (b) =>
+          b ? resolve(b) : reject(new Error("No se pudo generar miniatura")),
+        "image/webp",
+        0.72,
+      ),
+    );
+  const sha256Hex = async (buffer) => {
+    const hash = await crypto.subtle.digest("SHA-256", buffer.slice(0)),
+      bytes = new Uint8Array(hash);
+    return Array.from(bytes)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  };
+  const loadCloudCatalogs = async (tid) => {
+    const { data, error } = await supabase
+      .from("catalogs")
+      .select(
+        "id,brand,name,version,file_path,file_name,file_size,page_count,status,created_at,archived_at,metadata",
+      )
+      .eq("tenant_id", tid)
+      .in("status", ["active", "archived", "processing", "error"])
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    setCatalogs(
+      (data || []).map((x) => ({
+        id: x.id,
+        brand: x.brand,
+        name: x.name,
+        version: x.version,
+        filename: x.file_name,
+        bytes: Number(x.file_size || 0),
+        totalPages: x.page_count,
+        status: x.status,
+        filePath: x.file_path,
+        createdAt: x.created_at,
+        archivedAt: x.archived_at,
+        cloud: true,
+      })),
+    );
+  };
+  const loadTeam = async (tid) => {
+    const { data: members, error } = await supabase
+      .from("tenant_members")
+      .select("tenant_id,user_id,role,created_at")
+      .eq("tenant_id", tid)
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    const ids = (members || []).map((m) => m.user_id),
+      profiles = ids.length
+        ? (
+            await supabase
+              .from("profiles")
+              .select("id,email,display_name")
+              .in("id", ids)
+          ).data || []
+        : [];
+    setTeamMembers(
+      (members || []).map((m) => ({
+        ...m,
+        profile: profiles.find((p) => p.id === m.user_id) || null,
+      })),
+    );
+  };
+  const quoteFromCloud = (row) => {
+    const p = row.payload || {};
+    return {
+      ...p,
+      id: row.id,
+      dbId: row.id,
+      folio: row.folio,
+      status: row.status,
+      total: Number(row.total || 0),
+      clientId: row.customer_id || null,
+      clientName: p.clientName || "Sin asignar",
+      createdAt: row.created_at,
+      createdBy: row.created_by,
+      sourceKey: row.source_key || null,
+      cloud: true,
+    };
+  };
+  const loadCloudCommerce = async (tid) => {
+    const [customerRes, quoteRes] = await Promise.all([
+      supabase
+        .from("customers")
+        .select("id,name,phone,email,notes,created_at")
+        .eq("tenant_id", tid)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("quotes")
+        .select(
+          "id,customer_id,created_by,folio,status,total,payload,created_at,source_key",
+        )
+        .eq("tenant_id", tid)
+        .order("created_at", { ascending: false })
+        .limit(500),
+    ]);
+    if (customerRes.error) throw customerRes.error;
+    if (quoteRes.error) throw quoteRes.error;
+    setClients(customerRes.data || []);
+    setProposals((quoteRes.data || []).map(quoteFromCloud));
+  };
+  const loadCloudOrders = async (tid) => {
+    const { data, error } = await supabase
+      .from("orders")
+      .select(
+        "id,folio,status,total,payload,created_at,source_key,created_by,order_items(description,qty,unit_price)",
+      )
+      .eq("tenant_id", tid)
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error) return;
+    const cloud = (data || []).map((o) => {
+        const item = o.order_items?.[0] || {},
+          proposalId = o.payload?.localProposalId || null;
+        return {
+          id: o.id,
+          cloudOrderId: o.id,
+          folio: o.folio,
+          proposalId,
+          productId: o.payload?.productLocalId || null,
+          clientName: o.payload?.clientName || "Sin asignar",
+          product: o.payload?.productName || item.description || "Producto",
+          qty: Number(item.qty || 1),
+          total: Number(o.total || 0),
+          status: o.status || "Nuevo",
+          createdAt: o.created_at,
+          createdBy: o.created_by,
+        };
+      }),
+      local = load("msp_orders", []),
+      merged = [
+        ...cloud,
+        ...local.filter(
+          (l) =>
+            !cloud.some(
+              (x) =>
+                (x.proposalId &&
+                  String(x.proposalId) === String(l.proposalId)) ||
+                (l.cloudOrderId &&
+                  String(x.cloudOrderId) === String(l.cloudOrderId)),
+            ),
+        ),
+      ];
+    setOrders(merged);
+    try {
+      localStorage.setItem("msp_orders", JSON.stringify(merged));
+    } catch {}
+  };
+  const loadProduction = async (tid, role = currentRole) => {
+    const jobs = await supabase
+      .from("production_jobs")
+      .select(
+        "id,order_id,assigned_to,status,priority,notes,created_at,updated_at,orders(folio,total,payload,created_by,order_items(id,description,qty,unit_price,supplier_id))",
+      )
+      .eq("tenant_id", tid)
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (!jobs.error) setProductionJobs(jobs.data || []);
+    const supplierRes = await supabase
+      .from("suppliers")
+      .select("id,name,contact_name,phone,email,active")
+      .eq("tenant_id", tid)
+      .eq("active", true)
+      .order("name");
+    if (!supplierRes.error) setSuppliers(supplierRes.data || []);
+    if (role === "tenant_admin" || role === "production") {
+      const po = await supabase
+        .from("purchase_orders")
+        .select(
+          "id,order_id,supplier_id,folio,supplier_reference,status,cost_total,expected_at,received_at,notes,created_at,suppliers(name),purchase_order_items(id,description,qty,unit_cost)",
+        )
+        .eq("tenant_id", tid)
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (!po.error) setPurchaseOrders(po.data || []);
+    } else setPurchaseOrders([]);
+  };
+  const syncCloudCatalog = async (user) => {
+    setCloudBusy(true);
+    setCloudError("");
+    try {
+      const tid = await ensureTenant(user);
+      setTenantId(tid);
+      const { data: member } = await supabase
+        .from("tenant_members")
+        .select("role")
+        .eq("tenant_id", tid)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      setCurrentRole(member?.role || "");
+      if (member?.role === "tenant_admin") await loadTeam(tid);
+      await loadCloudCommerce(tid);
+      await loadProduction(tid, member?.role || "");
+      await loadCloudOrders(tid);
+      await loadCloudCatalogs(tid);
+      let { data, error } = await supabase
+        .from("products")
+        .select(
+          "id,tenant_id,name,category,price,image_url,active,created_at,surface,image_meta,legacy_id",
+        )
+        .eq("tenant_id", tid)
+        .eq("active", true)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      if (!data?.length) {
+        await migrateLocalCatalog(tid);
+        const retry = await supabase
+          .from("products")
+          .select(
+            "id,tenant_id,name,category,price,image_url,active,created_at,surface,image_meta,legacy_id",
+          )
+          .eq("tenant_id", tid)
+          .eq("active", true)
+          .order("created_at", { ascending: true });
+        if (retry.error) throw retry.error;
+        data = retry.data || [];
+      }
+      const hydrated = [];
+      for (const row of data || [])
+        hydrated.push(await hydrateCloudProduct(row));
+      if (hydrated.length) {
+        setProducts(hydrated);
+        setProduct(
+          (cur) =>
+            hydrated.find((p) => String(p.id) === String(cur?.id)) ||
+            hydrated[0],
+        );
+      }
+      setCloudReady(true);
+    } catch (e) {
+      console.error(e);
+      setCloudError(e.message || "No se pudo sincronizar la empresa");
+      setCloudReady(false);
+    } finally {
+      setCloudBusy(false);
+    }
+  };
+  useEffect(() => {
+    supabase.auth
+      .getSession()
+      .then(({ data }) => setSession(data.session || null));
+    const { data } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    return () => data.subscription.unsubscribe();
+  }, []);
+  useEffect(() => {
+    if (!session?.user)
+      idbCatalogs()
+        .then((rows) =>
+          setCatalogs(
+            (rows || []).sort((a, b) =>
+              String(b.createdAt || "").localeCompare(
+                String(a.createdAt || ""),
+              ),
+            ),
+          ),
+        )
+        .catch(() => {});
+  }, [session?.user?.id]);
+  useEffect(() => {
+    if (session?.user) {
+      (async () => {
+        try {
+          await supabase.functions.invoke("claim-team-invite", { body: {} });
+        } catch {}
+        await syncCloudCatalog(session.user);
+      })();
+    } else {
+      setTenantId("");
+      setCurrentRole("");
+      setTeamMembers([]);
+      setProductionJobs([]);
+      setSuppliers([]);
+      setPurchaseOrders([]);
+      setCloudReady(false);
+      setCloudError("");
+      const local = loadProducts();
+      setProducts(local);
+      setProduct(local[0] || demoProducts[0]);
+    }
+  }, [session?.user?.id]);
+  useEffect(() => {
+    if (
+      tenantId &&
+      session?.user &&
+      (active === "Producción" || active === "Pedidos")
+    ) {
+      loadProduction(tenantId, currentRole);
+      loadCloudOrders(tenantId);
+    }
+  }, [active, tenantId, currentRole]);
+  useEffect(() => {
+    if (tenantId && session?.user && active === "Catálogos")
+      loadCloudCatalogs(tenantId).catch(() => {});
+  }, [active, tenantId, currentRole]);
+  const indexCatalogPdf = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    if (f.type !== "application/pdf" && !/\.pdf$/i.test(f.name))
+      return notify("Selecciona un catálogo PDF");
+    if (f.size > 80 * 1024 * 1024) return notify("El catálogo supera 80 MB");
+    if (!session?.user || !tenantId)
+      return notify("Inicia sesión para subir catálogos compartidos");
+    if (!canManageCatalogs)
+      return notify("Solo Administración o Catálogos pueden subir PDFs");
+    const brand = catalogBrand.trim();
+    if (!brand) return notify("Escribe primero la marca o proveedor");
+    setCatalogBusy(true);
+    setCatalogProgress("Preparando PDF…");
+    let pdfPath = "",
+      catalogId = "",
+      uploadedImages = [];
+    try {
+      const buf = await f.arrayBuffer(),
+        checksum = await sha256Hex(buf),
+        pdf = await getDocument({ data: new Uint8Array(buf.slice(0)) }).promise,
+        safe =
+          f.name.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") ||
+          "catalogo.pdf";
+      pdfPath = tenantId + "/" + crypto.randomUUID() + "-" + safe;
+      setCatalogProgress("Subiendo PDF a la nube…");
+      const up = await supabase.storage
+        .from("catalog-pdfs")
+        .upload(pdfPath, f, {
+          contentType: "application/pdf",
+          cacheControl: "3600",
+          upsert: false,
+        });
+      if (up.error) throw up.error;
+      const begin = await supabase.rpc("begin_catalog_upload", {
+        p_tenant_id: tenantId,
+        p_brand: brand,
+        p_name: f.name.replace(/\.pdf$/i, ""),
+        p_version: null,
+        p_file_path: pdfPath,
+        p_file_name: f.name,
+        p_file_size: f.size,
+        p_checksum: checksum,
+      });
+      if (begin.error) throw begin.error;
+      catalogId = begin.data;
+      let batch = [];
+      for (let n = 1; n <= pdf.numPages; n++) {
+        setCatalogProgress("Indexando página " + n + " de " + pdf.numPages);
+        const page = await pdf.getPage(n),
+          tc = await page.getTextContent(),
+          text = tc.items
+            .map((i) => i.str || "")
+            .join(" ")
+            .replace(/\s+/g, " ")
+            .trim(),
+          base = page.getViewport({ scale: 1 }),
+          scale = Math.min(0.65, 420 / Math.max(1, base.width)),
+          viewport = page.getViewport({ scale }),
+          canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(viewport.width));
+        canvas.height = Math.max(1, Math.round(viewport.height));
+        const ctx = canvas.getContext("2d");
+        let imagePath = null;
+        if (ctx) {
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          const blob = await catalogCanvasBlob(canvas);
+          imagePath =
+            tenantId +
+            "/" +
+            catalogId +
+            "/page-" +
+            String(n).padStart(4, "0") +
+            ".webp";
+          const imgUp = await supabase.storage
+            .from("catalog-images")
+            .upload(imagePath, blob, {
+              contentType: "image/webp",
+              cacheControl: "86400",
+              upsert: false,
+            });
+          if (imgUp.error) throw imgUp.error;
+          uploadedImages.push(imagePath);
+        }
+        batch.push({
+          tenant_id: tenantId,
+          catalog_id: catalogId,
+          page_number: n,
+          text_content: text,
+          image_path: imagePath,
+        });
+        if (batch.length >= 20 || n === pdf.numPages) {
+          const ins = await supabase.from("catalog_pages").insert(batch);
+          if (ins.error) throw ins.error;
+          batch = [];
+        }
+      }
+      setCatalogProgress("Activando catálogo para vendedores…");
+      const fin = await supabase.rpc("finalize_catalog_upload", {
+        p_catalog_id: catalogId,
+        p_page_count: pdf.numPages,
+      });
+      if (fin.error) throw fin.error;
+      setCatalogBrand("");
+      await loadCloudCatalogs(tenantId);
+      setCatalogQuery("");
+      setCatalogSearchResults([]);
+      notify(
+        (fin.data?.archived_previous
+          ? "Catálogo actualizado"
+          : "Catálogo publicado") +
+          " · " +
+          pdf.numPages +
+          " páginas",
+      );
+    } catch (err) {
+      console.error(err);
+      if (catalogId)
+        await supabase
+          .from("catalogs")
+          .delete()
+          .eq("id", catalogId)
+          .eq("tenant_id", tenantId);
+      if (uploadedImages.length)
+        await supabase.storage.from("catalog-images").remove(uploadedImages);
+      if (pdfPath)
+        await supabase.storage.from("catalog-pdfs").remove([pdfPath]);
+      notify(err.message || "No se pudo procesar el catálogo");
+    } finally {
+      setCatalogBusy(false);
+      setCatalogProgress("");
+    }
+  };
+  const archiveCatalog = async (id) => {
+    if (!canManageCatalogs)
+      return notify("No tienes permiso para archivar catálogos");
+    if (
+      !confirm(
+        "¿Archivar este catálogo? Dejará de aparecer en las búsquedas de vendedores.",
+      )
+    )
+      return;
+    setCatalogBusy(true);
+    try {
+      const { error } = await supabase.rpc("archive_catalog", {
+        p_catalog_id: id,
+      });
+      if (error) throw error;
+      await loadCloudCatalogs(tenantId);
+      setCatalogSearchResults([]);
+      notify("Catálogo archivado");
+    } catch (e) {
+      notify(e.message || "No se pudo archivar");
+    } finally {
+      setCatalogBusy(false);
+    }
+  };
+  const removeCatalog = async (id) => {
+    const target = catalogs.find((x) => String(x.id) === String(id));
+    if (target?.cloud) {
+      if (!canManageCatalogs)
+        return notify("No tienes permiso para eliminar catálogos");
+      if (!confirm("¿Eliminar definitivamente este catálogo y sus archivos?"))
+        return;
+      setCatalogBusy(true);
+      try {
+        const pages = await supabase
+          .from("catalog_pages")
+          .select("image_path")
+          .eq("catalog_id", id);
+        const imagePaths = (pages.data || [])
+          .map((x) => x.image_path)
+          .filter(Boolean);
+        if (imagePaths.length)
+          await supabase.storage.from("catalog-images").remove(imagePaths);
+        if (target.filePath)
+          await supabase.storage.from("catalog-pdfs").remove([target.filePath]);
+        const del = await supabase
+          .from("catalogs")
+          .delete()
+          .eq("id", id)
+          .eq("tenant_id", tenantId);
+        if (del.error) throw del.error;
+        await loadCloudCatalogs(tenantId);
+        setCatalogSearchResults((v) =>
+          v.filter((x) => String(x.catalogId) !== String(id)),
+        );
+        notify("Catálogo eliminado definitivamente");
+      } catch (e) {
+        notify(e.message || "No se pudo eliminar");
+      } finally {
+        setCatalogBusy(false);
+      }
+      return;
+    }
+    if (!confirm("¿Eliminar este catálogo y su índice de búsqueda?")) return;
+    try {
+      await idbDeleteCatalog(id);
+      setCatalogs((v) => v.filter((x) => x.id !== id));
+      notify("Catálogo eliminado");
+    } catch (e) {
+      notify("No se pudo eliminar el catálogo");
+    }
+  };
+  const openCatalogPage = async (item) => {
+    try {
+      if (item.filePath || item.file_path || item.cloud) {
+        const path =
+          item.filePath ||
+          item.file_path ||
+          catalogs.find(
+            (c) => String(c.id) === String(item.catalogId || item.id),
+          )?.filePath;
+        if (!path) throw new Error("No se encontró el PDF");
+        const { data, error } = await supabase.storage
+          .from("catalog-pdfs")
+          .createSignedUrl(path, 600);
+        if (error) throw error;
+        const w = window.open(
+          data.signedUrl + "#page=" + (item.page || item.page_number || 1),
+          "_blank",
+        );
+        if (!w) notify("El navegador bloqueó la apertura del PDF");
+        return;
+      }
+      const blob = new Blob([item.pdfBytes], { type: "application/pdf" }),
+        url = URL.createObjectURL(blob),
+        w = window.open(url + "#page=" + (item.page || 1), "_blank");
+      if (!w) notify("El navegador bloqueó la apertura del PDF");
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) {
+      notify(e.message || "No se pudo abrir el PDF");
+    }
+  };
+  const searchCloudCatalogs = async (q) => {
+    const term = q.trim();
+    if (!session?.user || !tenantId || term.length < 2) {
+      setCatalogSearchResults([]);
+      return;
+    }
+    setCatalogSearchBusy(true);
+    try {
+      const { data, error } = await supabase.rpc("search_catalog_pages", {
+        search_query: term,
+        max_results: 80,
+      });
+      if (error) throw error;
+      const rows = data || [],
+        paths = [
+          ...new Set(rows.map((x) => x.page_image_path).filter(Boolean)),
+        ],
+        signed = {};
+      if (paths.length) {
+        const s = await supabase.storage
+          .from("catalog-images")
+          .createSignedUrls(paths, 600);
+        for (const x of s.data || [])
+          if (x.path && x.signedUrl) signed[x.path] = x.signedUrl;
+      }
+      setCatalogSearchResults(
+        rows.map((x) => ({
+          catalogId: x.catalog_id,
+          catalogName: x.catalog_name,
+          brand: x.brand,
+          page: x.page_number,
+          text: x.text_content,
+          filePath: x.file_path,
+          pageImagePath: x.page_image_path,
+          pageImageUrl: signed[x.page_image_path] || null,
+          cloud: true,
+        })),
+      );
+    } catch (e) {
+      console.error(e);
+      setCatalogSearchResults([]);
+    } finally {
+      setCatalogSearchBusy(false);
+    }
+  };
+  const catalogResults = session?.user
+    ? catalogSearchResults
+    : (() => {
+        const q = normalizeSearch(catalogQuery).trim(),
+          terms = q.split(/\s+/).filter(Boolean);
+        if (!terms.length) return [];
+        const out = [];
+        for (const cat of catalogs) {
+          const brand = normalizeSearch(cat.brand + " " + cat.name);
+          for (const p of cat.pages || []) {
+            const hay = brand + " " + (p.search || normalizeSearch(p.text));
+            if (terms.every((t) => hay.includes(t))) {
+              out.push({
+                catalogId: cat.id,
+                catalogName: cat.name,
+                brand: cat.brand,
+                page: p.page,
+                text: p.text,
+                pdfBytes: cat.pdfBytes,
+              });
+              if (out.length >= 80) return out;
+            }
+          }
+        }
+        return out;
+      })();
+  useEffect(() => {
+    if (!session?.user) return;
+    const t = setTimeout(() => searchCloudCatalogs(catalogQuery), 300);
+    return () => clearTimeout(t);
+  }, [catalogQuery, tenantId, session?.user?.id]);
+  const roleLabel = (r) =>
+    ({
+      tenant_admin: "Administrador",
+      catalog_manager: "Encargado de catálogos",
+      salesperson: "Vendedor",
+      designer: "Diseño / Mockups",
+      production: "Producción",
+    })[r] || r;
+  const inviteTeamMember = async () => {
+    const email = inviteEmail.trim().toLowerCase();
+    if (currentRole !== "tenant_admin")
+      return notify("Solo el administrador puede invitar usuarios");
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))
+      return notify("Escribe un correo válido");
+    setAdminBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "invite-team-member",
+        { body: { tenantId, email, role: inviteRole } },
+      );
+      if (error) throw error;
+      setInviteEmail("");
+      notify(data?.message || "Invitación creada");
+      await loadTeam(tenantId);
+    } catch (e) {
+      notify(e.message || "No se pudo enviar la invitación");
+    } finally {
+      setAdminBusy(false);
+    }
+  };
+  const changeMemberRole = async (userId, role) => {
+    if (currentRole !== "tenant_admin") return;
+    setAdminBusy(true);
+    try {
+      const { error } = await supabase
+        .from("tenant_members")
+        .update({ role })
+        .eq("tenant_id", tenantId)
+        .eq("user_id", userId);
+      if (error) throw error;
+      await loadTeam(tenantId);
+      notify("Rol actualizado");
+    } catch (e) {
+      notify(e.message || "No se pudo cambiar el rol");
+    } finally {
+      setAdminBusy(false);
+    }
+  };
+  const removeMember = async (userId) => {
+    if (currentRole !== "tenant_admin") return;
+    if (userId === session?.user?.id)
+      return notify("No puedes retirar tu propio acceso desde aquí");
+    if (!confirm("¿Retirar a este usuario de la empresa?")) return;
+    setAdminBusy(true);
+    try {
+      const { error } = await supabase
+        .from("tenant_members")
+        .delete()
+        .eq("tenant_id", tenantId)
+        .eq("user_id", userId);
+      if (error) throw error;
+      await loadTeam(tenantId);
+      notify("Acceso retirado");
+    } catch (e) {
+      notify(e.message || "No se pudo retirar el acceso");
+    } finally {
+      setAdminBusy(false);
+    }
+  };
+  const canManageProduction =
+    currentRole === "tenant_admin" || currentRole === "production";
+  const updatePurchaseDraft = (jobId, patch) =>
+    setPurchaseDrafts((v) => ({
+      ...v,
+      [jobId]: {
+        supplierId: "",
+        costTotal: "",
+        reference: "",
+        expectedAt: "",
+        notes: "",
+        ...(v[jobId] || {}),
+        ...patch,
+      },
+    }));
+  const addSupplier = async () => {
+    if (!canManageProduction)
+      return notify(
+        "Solo Administración o Producción pueden crear proveedores",
+      );
+    const name = supplierForm.name.trim();
+    if (!name) return notify("Escribe el nombre del proveedor");
+    setProductionBusy("supplier");
+    try {
+      const { error } = await supabase.from("suppliers").insert({
+        tenant_id: tenantId,
+        name,
+        contact_name: supplierForm.contact_name.trim() || null,
+        phone: supplierForm.phone.trim() || null,
+        email: supplierForm.email.trim() || null,
+        created_by: session.user.id,
+      });
+      if (error) throw error;
+      setSupplierForm({ name: "", contact_name: "", phone: "", email: "" });
+      await loadProduction(tenantId, currentRole);
+      notify("Proveedor agregado");
+    } catch (e) {
+      notify(e.message || "No se pudo guardar el proveedor");
+    } finally {
+      setProductionBusy("");
+    }
+  };
+  const createSupplierOrder = async (job) => {
+    if (!canManageProduction)
+      return notify(
+        "Solo Administración o Producción pueden solicitar al proveedor",
+      );
+    const d = purchaseDrafts[job.id] || {},
+      supplierId = d.supplierId;
+    if (!supplierId) return notify("Selecciona un proveedor");
+    setProductionBusy(job.id);
+    try {
+      const expected = d.expectedAt
+          ? new Date(d.expectedAt).toISOString()
+          : null,
+        { data, error } = await supabase.rpc("create_purchase_order_for_job", {
+          p_job_id: job.id,
+          p_supplier_id: supplierId,
+          p_cost_total: Math.max(0, Number(d.costTotal) || 0),
+          p_supplier_reference: d.reference?.trim() || null,
+          p_expected_at: expected,
+          p_notes: d.notes?.trim() || null,
+        });
+      if (error) throw error;
+      await loadProduction(tenantId, currentRole);
+      await loadCloudOrders(tenantId);
+      notify(
+        data?.duplicate
+          ? "Ya existía una orden activa para ese proveedor"
+          : "Orden enviada al proveedor",
+      );
+    } catch (e) {
+      notify(e.message || "No se pudo crear la orden de compra");
+    } finally {
+      setProductionBusy("");
+    }
+  };
+  const updateSupplierOrder = async (po, status) => {
+    if (!canManageProduction) return;
+    setProductionBusy(po.id);
+    try {
+      const { error } = await supabase.rpc("update_purchase_order_status", {
+        p_purchase_order_id: po.id,
+        p_status: status,
+        p_supplier_reference: null,
+        p_expected_at: null,
+        p_notes: null,
+      });
+      if (error) throw error;
+      await loadProduction(tenantId, currentRole);
+      await loadCloudOrders(tenantId);
+      notify(
+        status === "Recibido"
+          ? "Material recibido del proveedor"
+          : "Orden de proveedor: " + status,
+      );
+    } catch (e) {
+      notify(e.message || "No se pudo actualizar la orden");
+    } finally {
+      setProductionBusy("");
+    }
+  };
+  const advanceProduction = async (job, status) => {
+    if (!canManageProduction) return;
+    setProductionBusy(job.id);
+    try {
+      const { error } = await supabase.rpc("advance_production_job", {
+        p_job_id: job.id,
+        p_status: status,
+        p_notes: null,
+      });
+      if (error) throw error;
+      await loadProduction(tenantId, currentRole);
+      await loadCloudOrders(tenantId);
+      notify("Producción: " + status);
+    } catch (e) {
+      notify(e.message || "No se pudo avanzar producción");
+    } finally {
+      setProductionBusy("");
+    }
+  };
+  const sendSellerAccess = async () => {
+    const email = sellerEmail.trim();
+    if (!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email))
+      return notify("Escribe un correo válido");
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.href.split("#")[0] },
+    });
+    notify(
+      error
+        ? "No se pudo enviar el acceso"
+        : "Te enviamos un enlace de acceso al correo",
+    );
+  };
+  const notify = (m) => {
+      setNotice(m);
+      setTimeout(() => setNotice(""), 2200);
+    },
+    persist = (k, setter, next) => {
+      localStorage.setItem(k, JSON.stringify(next));
+      setter(next);
+    };
+  const uploadProductPhoto = async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (!/^image\//.test(f.type))
+      return notify("Selecciona una fotografía válida");
+    if (f.size > 10 * 1024 * 1024)
+      return notify("Foto demasiado grande (máx. 10 MB)");
+    try {
+      const out = await optimizeProductPhoto(f);
+      setAiOriginal(out.src);
+      setProductForm((v) => ({ ...v, image: out.src }));
+      setProductPhotoMeta({
+        name: out.name,
+        width: out.width,
+        height: out.height,
+        bytes: out.bytes,
+        originalWidth: out.originalWidth,
+        originalHeight: out.originalHeight,
+      });
+      if (out.originalWidth < 900 || out.originalHeight < 900)
+        notify(
+          "Foto optimizada. Para venta conviene partir de mínimo 900 × 900 px",
+        );
+      else notify("Foto optimizada automáticamente para MockuPro");
+    } catch (err) {
+      notify(err.message || "No se pudo preparar la foto");
+    }
+  };
+  const prepareProductAI = async () => {
+    if (!productForm.image?.startsWith("data:image/"))
+      return notify("Primero sube una foto del producto");
+    setAiBusy(true);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token)
+        return notify(
+          "La IA ya está preparada; falta iniciar sesión del vendedor para usarla de forma segura",
+        );
+      const res = await fetch(
+        "https://dsgyioqbatvwhxugumoa.supabase.co/functions/v1/prepare-product-ai",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: "sb_publishable_dAbY9OY5BO80M9V4rEuVtQ_FZJ3l1AH",
+            Authorization: "Bearer " + session.access_token,
+          },
+          body: JSON.stringify({
+            imageDataUrl: productForm.image,
+            preset: aiPreset,
+          }),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok)
+        throw new Error(data.error || "No se pudo procesar la imagen");
+      if (!aiOriginal) setAiOriginal(productForm.image);
+      setProductForm((v) => ({ ...v, image: data.imageDataUrl }));
+      notify("Foto preparada con IA");
+    } catch (e) {
+      notify(e.message || "Error de IA");
+    } finally {
+      setAiBusy(false);
+    }
+  };
+  const addProduct = async () => {
+    if (!canManageProducts)
+      return notify("Solo Administración o Catálogos pueden guardar productos");
+    const name = productForm.name.trim(),
+      category = productForm.category.trim() || "Otros",
+      price = Number(productForm.price),
+      image = productForm.image.trim();
+    if (!name) return notify("Escribe el nombre del producto");
+    if (!Number.isFinite(price) || price < 0) return notify("Precio no válido");
+    if (
+      image.startsWith("data:image/") &&
+      productPhotoMeta &&
+      (productPhotoMeta.width < 640 || productPhotoMeta.height < 640)
+    )
+      return notify("La foto es demasiado pequeña. Usa al menos 640 × 640 px");
+    if (session?.user && tenantId) {
+      setCloudBusy(true);
+      try {
+        const imageRef = await uploadCloudImage(image, tenantId);
+        const { data, error } = await supabase
+          .from("products")
+          .insert({
+            tenant_id: tenantId,
+            name,
+            category,
+            price,
+            image_url: imageRef || null,
+            surface: productForm.surface || "matte",
+            image_meta: productPhotoMeta || {},
+          })
+          .select(
+            "id,tenant_id,name,category,price,image_url,active,created_at,surface,image_meta,legacy_id",
+          )
+          .single();
+        if (error) throw error;
+        const created = await hydrateCloudProduct(data),
+          next = [...products, created];
+        setProducts(next);
+        setProductForm({
+          name: "",
+          category: "Promocional",
+          price: "",
+          image: "",
+          surface: "matte",
+        });
+        setProductPhotoMeta(null);
+        setAiOriginal("");
+        notify("Producto guardado en la nube");
+      } catch (e) {
+        console.error(e);
+        notify(e.message || "No se pudo guardar el producto");
+      } finally {
+        setCloudBusy(false);
+      }
+      return;
+    }
+    const next = [
+      ...products,
+      {
+        id: Date.now(),
+        name,
+        category,
+        price,
+        image,
+        surface: productForm.surface || "matte",
+        imageMeta: productPhotoMeta || null,
+      },
+    ];
+    persist("msp_products", setProducts, next);
+    setProductForm({
+      name: "",
+      category: "Promocional",
+      price: "",
+      image: "",
+      surface: "matte",
+    });
+    setProductPhotoMeta(null);
+    setAiOriginal("");
+    notify("Producto agregado localmente");
+  };
+  const deleteProduct = async (id) => {
+    if (!canManageProducts)
+      return notify("No tienes permiso para eliminar productos");
+    if (products.length <= 1)
+      return notify("Debe existir al menos un producto");
+    if (
+      proposals.some((q) => String(q.productId) === String(id)) ||
+      orders.some((o) => String(o.productId) === String(id))
+    )
+      return notify("Producto con historial: no se puede eliminar");
+    if (!confirm("¿Eliminar este producto del catálogo?")) return;
+    const target = products.find((p) => String(p.id) === String(id));
+    if (target?.dbId && session?.user && tenantId) {
+      setCloudBusy(true);
+      try {
+        const { error } = await supabase
+          .from("products")
+          .delete()
+          .eq("id", target.dbId)
+          .eq("tenant_id", tenantId);
+        if (error) throw error;
+        if (isCloudStoragePath(target.imagePath))
+          await supabase.storage
+            .from("product-images")
+            .remove([target.imagePath]);
+        const next = products.filter((p) => String(p.id) !== String(id));
+        setProducts(next);
+        if (String(product.id) === String(id)) setProduct(next[0]);
+        notify("Producto eliminado de la nube");
+      } catch (e) {
+        console.error(e);
+        notify(e.message || "No se pudo eliminar");
+      } finally {
+        setCloudBusy(false);
+      }
+      return;
+    }
+    const next = products.filter((p) => String(p.id) !== String(id));
+    persist("msp_products", setProducts, next);
+    if (String(product.id) === String(id)) setProduct(next[0]);
+    notify("Producto eliminado");
+  };
+  const replaceProductPhoto = async (id, e) => {
+    if (!canManageProducts) {
+      e.target.value = "";
+      return notify("No tienes permiso para cambiar productos");
+    }
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    if (!/^image\//.test(f.type))
+      return notify("Selecciona una fotografía válida");
+    if (f.size > 10 * 1024 * 1024)
+      return notify("Foto demasiado grande (máx. 10 MB)");
+    try {
+      const out = await optimizeProductPhoto(f),
+        meta = {
+          name: out.name,
+          width: out.width,
+          height: out.height,
+          bytes: out.bytes,
+          originalWidth: out.originalWidth,
+          originalHeight: out.originalHeight,
+        },
+        target = products.find((p) => String(p.id) === String(id));
+      if (target?.dbId && session?.user && tenantId) {
+        setCloudBusy(true);
+        const newPath = await uploadCloudImage(out.src, tenantId);
+        const { data, error } = await supabase
+          .from("products")
+          .update({ image_url: newPath, image_meta: meta })
+          .eq("id", target.dbId)
+          .eq("tenant_id", tenantId)
+          .select(
+            "id,tenant_id,name,category,price,image_url,active,created_at,surface,image_meta,legacy_id",
+          )
+          .single();
+        if (error) throw error;
+        const fresh = await hydrateCloudProduct(data),
+          next = products.map((p) =>
+            String(p.id) === String(id) ? { ...fresh, id: p.id } : p,
+          );
+        setProducts(next);
+        if (String(product.id) === String(id))
+          setProduct(next.find((p) => String(p.id) === String(id)) || product);
+        if (
+          isCloudStoragePath(target.imagePath) &&
+          target.imagePath !== newPath
+        )
+          await supabase.storage
+            .from("product-images")
+            .remove([target.imagePath]);
+        notify("Foto reemplazada y sincronizada");
+        return;
+      }
+      const next = products.map((p) =>
+        String(p.id) === String(id)
+          ? { ...p, image: out.src, imageMeta: meta }
+          : p,
+      );
+      persist("msp_products", setProducts, next);
+      if (String(product.id) === String(id))
+        setProduct(next.find((p) => String(p.id) === String(id)) || product);
+      notify("Foto reemplazada y optimizada");
+    } catch (err) {
+      console.error(err);
+      notify(err.message || "No se pudo reemplazar la foto");
+    } finally {
+      setCloudBusy(false);
+    }
+  };
+  const addClient = async () => {
+    if (!canManageClients)
+      return notify("Solo Administración o Ventas pueden guardar clientes");
+    const name = clientForm.name.trim(),
+      phone = clientForm.phone.trim(),
+      email = clientForm.email.trim();
+    if (!name) return notify("Escribe el nombre del cliente");
+    if (email && !/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email))
+      return notify("Correo no válido");
+    if (
+      clients.some(
+        (c) =>
+          c.name.trim().toLowerCase() === name.toLowerCase() &&
+          (c.phone || "").trim() === phone,
+      )
+    )
+      return notify("Cliente duplicado");
+    if (session?.user && tenantId) {
+      setCloudBusy(true);
+      try {
+        const { data, error } = await supabase
+          .from("customers")
+          .insert({
+            tenant_id: tenantId,
+            name,
+            phone: phone || null,
+            email: email || null,
+          })
+          .select("id,name,phone,email,notes,created_at")
+          .single();
+        if (error) throw error;
+        setClients((v) => [...v, data]);
+        setClientForm({ name: "", phone: "", email: "" });
+        notify("Cliente guardado para toda la empresa");
+      } catch (e) {
+        notify(e.message || "No se pudo guardar el cliente");
+      } finally {
+        setCloudBusy(false);
+      }
+      return;
+    }
+    const next = [...clients, { id: Date.now(), name, phone, email }];
+    persist("msp_clients", setClients, next);
+    setClientForm({ name: "", phone: "", email: "" });
+    notify("Cliente guardado localmente");
+  };
+  const deleteClient = async (id) => {
+    if (!canManageClients)
+      return notify("No tienes permiso para eliminar clientes");
+    if (
+      proposals.some((q) => String(q.clientId) === String(id)) ||
+      orders.some((o) => String(o.clientId) === String(id))
+    )
+      return notify("Cliente con historial: no se puede eliminar");
+    if (!confirm("¿Eliminar este cliente?")) return;
+    if (session?.user && tenantId && typeof id === "string") {
+      setCloudBusy(true);
+      try {
+        const { error } = await supabase
+          .from("customers")
+          .delete()
+          .eq("id", id)
+          .eq("tenant_id", tenantId);
+        if (error) throw error;
+        setClients((v) => v.filter((c) => String(c.id) !== String(id)));
+        notify("Cliente eliminado de la empresa");
+      } catch (e) {
+        notify(e.message || "No se pudo eliminar el cliente");
+      } finally {
+        setCloudBusy(false);
+      }
+      return;
+    }
+    persist(
+      "msp_clients",
+      setClients,
+      clients.filter((c) => c.id !== id),
+    );
+    notify("Cliente eliminado");
+  };
+  const upload = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (!(/^image\//.test(f.type) || /\.svg$/i.test(f.name)))
+      return notify("Archivo de logo no válido");
+    if (f.size > 8 * 1024 * 1024)
+      return notify("Logo demasiado grande (máx. 8 MB)");
+    const rd = new FileReader();
+    rd.onload = (ev) => setLogo(ev.target.result);
+    rd.readAsDataURL(f);
+  };
+  const moveLogoToPointer = (e) => {
+    const box = e.currentTarget.parentElement?.getBoundingClientRect();
+    if (!box || !box.width || !box.height) return;
+    const nx = Math.max(
+        5,
+        Math.min(95, ((e.clientX - box.left) / box.width) * 100),
+      ),
+      ny = Math.max(
+        5,
+        Math.min(95, ((e.clientY - box.top) / box.height) * 100),
+      );
+    setX(Number(nx.toFixed(1)));
+    setY(Number(ny.toFixed(1)));
+  };
+  const startLogoDrag = (e) => {
+    e.preventDefault();
+    setDragging(true);
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    moveLogoToPointer(e);
+  };
+  const dragLogo = (e) => {
+    if (dragging) moveLogoToPointer(e);
+  };
+  const stopLogoDrag = (e) => {
+    setDragging(false);
+    if (e.currentTarget.hasPointerCapture?.(e.pointerId))
+      e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+  const subtotal = Number(product?.price || 0) * qty,
+    total = subtotal * (1 - discount / 100);
+  const resetEditor = () => {
+    setSize(35);
+    setX(50);
+    setY(50);
+    setQty(1);
+    setDiscount(0);
+    setRotation(0);
+    setProductColor("#eef2f6");
+    setPlacement("Frente");
+    setNotes("");
+    setRealism(82);
+    setLogoOpacity(94);
+    setBlendMode("multiply");
+    setZoom(1);
+    setViewMode("Estudio");
+    setFitMode("contain");
+    setPhotoX(50);
+    setPhotoY(50);
+    setSkewX(0);
+    setSkewY(0);
+    setCompare(false);
+    setFavorite(false);
+  };
+  const choosePlacement = (v) => {
+    setPlacement(v);
+    const p = productPreset(product, v);
+    setX(p[0]);
+    setY(p[1]);
+    setSize(p[2]);
+    setSkewX(p[3]);
+    setSkewY(p[4]);
+    setBlendMode(p[5]);
+  };
+  const saveProposal = async () => {
+    if (!logo) return notify("Carga un logo primero");
+    const c = clients.find((z) => String(z.id) === String(selectedClient)),
+      now = Date.now(),
+      folio = "COT-" + String(now).slice(-6),
+      payload = {
+        version: 1,
+        product: product.name,
+        productId: product.id,
+        clientName: c?.name || "Sin asignar",
+        qty,
+        logo,
+        productColor,
+        rotation,
+        x,
+        y,
+        size,
+        placement,
+        notes,
+        favorite,
+        realism,
+        logoOpacity,
+        blendMode,
+        zoom,
+        fitMode,
+        photoX,
+        photoY,
+        skewX,
+        skewY,
+        viewMode,
+      };
+    if (session?.user && tenantId) {
+      setCloudBusy(true);
+      try {
+        const { data, error } = await supabase
+          .from("quotes")
+          .insert({
+            tenant_id: tenantId,
+            customer_id: selectedClient || null,
+            created_by: session.user.id,
+            folio,
+            status: "Borrador",
+            total,
+            payload,
+            source_key: "web:" + crypto.randomUUID(),
+          })
+          .select(
+            "id,customer_id,created_by,folio,status,total,payload,created_at,source_key",
+          )
+          .single();
+        if (error) throw error;
+        setProposals((v) => [quoteFromCloud(data), ...v]);
+        notify("Cotización guardada para toda la empresa");
+      } catch (e) {
+        notify(e.message || "No se pudo guardar la cotización");
+      } finally {
+        setCloudBusy(false);
+      }
+      return;
+    }
+    const q = {
+      id: now,
+      folio,
+      createdAt: new Date(now).toISOString(),
+      ...payload,
+      clientId: selectedClient || null,
+      total,
+      status: "Borrador",
+    };
+    persist("msp_proposals", setProposals, [q, ...proposals]);
+    notify("Propuesta guardada localmente");
+  };
+  const loadProposal = (q) => {
+    const p = products.find((z) => String(z.id) === String(q.productId));
+    if (p) setProduct(p);
+    setSelectedClient(q.clientId || "");
+    setLogo(q.logo || "");
+    setQty(q.qty || 1);
+    setProductColor(q.productColor || "#eef2f6");
+    setRotation(q.rotation || 0);
+    setX(q.x ?? 50);
+    setY(q.y ?? 50);
+    setSize(q.size ?? 35);
+    setPlacement(q.placement || "Frente");
+    setNotes(q.notes || "");
+    setFavorite(!!q.favorite);
+    setRealism(q.realism ?? 82);
+    setLogoOpacity(q.logoOpacity ?? 94);
+    setBlendMode(q.blendMode || "multiply");
+    setZoom(q.zoom ?? 1);
+    setFitMode(q.fitMode || "contain");
+    setPhotoX(q.photoX ?? 50);
+    setPhotoY(q.photoY ?? 50);
+    setSkewX(q.skewX ?? 0);
+    setSkewY(q.skewY ?? 0);
+    setViewMode(q.viewMode || "Estudio");
+    setActive("Mockups");
+    notify("Propuesta cargada en el editor");
+  };
+  const setProposalStatus = async (id, status) => {
+    const current = proposals.find((q) => q.id === id);
+    if (!current) return;
+    if (current.status === "Aprobado" && status !== "Aprobado")
+      return notify("Propuesta aprobada: crea una nueva versión");
+    const statusAt = new Date().toISOString();
+    if (current.cloud && session?.user && tenantId) {
+      const payload = { ...current, statusAt };
+      delete payload.id;
+      delete payload.dbId;
+      delete payload.cloud;
+      delete payload.folio;
+      delete payload.status;
+      delete payload.total;
+      delete payload.clientId;
+      delete payload.createdAt;
+      delete payload.createdBy;
+      delete payload.sourceKey;
+      const { error } = await supabase
+        .from("quotes")
+        .update({ status, payload })
+        .eq("id", id)
+        .eq("tenant_id", tenantId);
+      if (error)
+        return notify(error.message || "No se pudo actualizar la cotización");
+      setProposals((v) =>
+        v.map((q) => (q.id === id ? { ...q, status, statusAt } : q)),
+      );
+      notify("Estado compartido: " + status);
+      return;
+    }
+    persist(
+      "msp_proposals",
+      setProposals,
+      proposals.map((q) => (q.id === id ? { ...q, status, statusAt } : q)),
+    );
+    notify("Estado: " + status);
+  };
+  const createProductionOrder = async (q) => {
+    if (!q) return;
+    if (!session?.user || !tenantId)
+      return notify("Inicia sesión para aprobar y enviar a producción");
+    if (
+      orders.some(
+        (o) => String(o.proposalId) === String(q.id) && o.cloudOrderId,
+      )
+    )
+      return notify("Esta cotización ya generó un pedido");
+    setCloudBusy(true);
+    try {
+      const selectedProduct = products.find(
+          (p) => String(p.id) === String(q.productId),
+        ),
+        dbProductId =
+          selectedProduct?.dbId ||
+          (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+            String(selectedProduct?.id || ""),
+          )
+            ? selectedProduct.id
+            : null),
+        sourceKey = "proposal:" + String(q.id),
+        orderFolio = "PED-" + String(q.id).slice(-6),
+        client = clients.find((c) => String(c.id) === String(q.clientId)),
+        unitPrice =
+          Number(q.qty) > 0 ? Number(q.total || 0) / Number(q.qty) : 0,
+        payload = {
+          localProposalId: String(q.id),
+          proposalFolio: q.folio || null,
+          clientName: q.clientName || client?.name || "Sin asignar",
+          clientPhone: client?.phone || null,
+          clientEmail: client?.email || null,
+          productName: q.product,
+          productLocalId: String(q.productId || ""),
+          sellerId: session.user.id,
+          placement: q.placement || "Frente",
+          notes: q.notes || "",
+          version: Number(q.version || 1),
+          approvedAt: new Date().toISOString(),
+        },
+        customization = {
+          placement: q.placement || "Frente",
+          productColor: q.productColor || null,
+          rotation: q.rotation || 0,
+          x: q.x ?? 50,
+          y: q.y ?? 50,
+          size: q.size ?? 35,
+          realism: q.realism ?? 82,
+          logoOpacity: q.logoOpacity ?? 94,
+          blendMode: q.blendMode || "multiply",
+          skewX: q.skewX ?? 0,
+          skewY: q.skewY ?? 0,
+          logoIncluded: !!q.logo,
+        };
+      const { data, error } = await supabase.rpc(
+        "approve_quote_to_production",
+        {
+          p_tenant_id: tenantId,
+          p_source_key: sourceKey,
+          p_quote_folio: q.folio || "COT-" + String(q.id).slice(-6),
+          p_order_folio: orderFolio,
+          p_customer_id: q.clientId || null,
+          p_total: Number(q.total || 0),
+          p_payload: payload,
+          p_product_id: dbProductId,
+          p_item_description: q.product || "Producto MockuPro",
+          p_qty: Number(q.qty || 1),
+          p_unit_price: unitPrice,
+          p_customization: customization,
+        },
+      );
+      if (error) throw error;
+      const approvedAt = new Date().toISOString(),
+        nextProposals = proposals.map((p) =>
+          p.id === q.id
+            ? {
+                ...p,
+                status: "Aprobado",
+                statusAt: approvedAt,
+                cloudOrderId: data?.order_id || null,
+                productionJobId: data?.production_job_id || null,
+              }
+            : p,
+        );
+      setProposals(nextProposals);
+      try {
+        localStorage.setItem("msp_proposals", JSON.stringify(nextProposals));
+      } catch {}
+      if (q.cloud) {
+        const quotePayload = {
+          ...q,
+          statusAt: approvedAt,
+          cloudOrderId: data?.order_id || null,
+          productionJobId: data?.production_job_id || null,
+        };
+        for (const k of [
+          "id",
+          "dbId",
+          "cloud",
+          "folio",
+          "status",
+          "total",
+          "clientId",
+          "createdAt",
+          "createdBy",
+          "sourceKey",
+        ])
+          delete quotePayload[k];
+        const quoteUpdate = await supabase
+          .from("quotes")
+          .update({ status: "Aprobado", payload: quotePayload })
+          .eq("id", q.id)
+          .eq("tenant_id", tenantId);
+        if (quoteUpdate.error) throw quoteUpdate.error;
+      }
+      const existingLocal = orders.find(
+        (o) => String(o.proposalId) === String(q.id),
+      );
+      if (existingLocal) {
+        persist(
+          "msp_orders",
+          setOrders,
+          orders.map((o) =>
+            String(o.proposalId) === String(q.id)
+              ? {
+                  ...o,
+                  cloudOrderId: data?.order_id || o.cloudOrderId || null,
+                  productionJobId:
+                    data?.production_job_id || o.productionJobId || null,
+                  status: o.status || "Nuevo",
+                }
+              : o,
+          ),
+        );
+      } else {
+        const o = {
+          id: data?.order_id || Date.now(),
+          cloudOrderId: data?.order_id || null,
+          productionJobId: data?.production_job_id || null,
+          folio: orderFolio,
+          proposalId: q.id,
+          productId: q.productId || null,
+          clientId: q.clientId,
+          clientName: q.clientName,
+          product: q.product,
+          qty: q.qty,
+          total: q.total,
+          status: "Nuevo",
+          createdAt: approvedAt,
+        };
+        persist("msp_orders", setOrders, [o, ...orders]);
+      }
+      await loadProduction(tenantId);
+      notify(
+        data?.duplicate
+          ? "Pedido ya existente; producción sincronizada"
+          : "Cotización aprobada · pedido enviado a Producción",
+      );
+      return data;
+    } catch (e) {
+      console.error(e);
+      notify(e.message || "No se pudo aprobar la cotización");
+    } finally {
+      setCloudBusy(false);
+    }
+  };
+  const approve = async (id) => {
+    const q = proposals.find((p) => p.id === id);
+    if (!q) return;
+    if (
+      q.status === "Aprobado" &&
+      orders.some((o) => String(o.proposalId) === String(id) && o.cloudOrderId)
+    )
+      return notify("Esta cotización ya está aprobada y en Producción");
+    return createProductionOrder(q);
+  };
+  const duplicateProposal = async (q) => {
+    const now = Date.now(),
+      folio = "COT-" + String(now).slice(-6),
+      copy = {
+        ...q,
+        id: now,
+        folio,
+        createdAt: new Date(now).toISOString(),
+        status: "Borrador",
+        version: Number(q.version || 1) + 1,
+        parentId: q.parentId || q.id,
+        cloudOrderId: null,
+        productionJobId: null,
+        cloud: false,
+      };
+    if (q.cloud && session?.user && tenantId) {
+      const payload = { ...copy };
+      for (const k of [
+        "id",
+        "dbId",
+        "cloud",
+        "folio",
+        "status",
+        "total",
+        "clientId",
+        "createdAt",
+        "createdBy",
+        "sourceKey",
+      ])
+        delete payload[k];
+      const { data, error } = await supabase
+        .from("quotes")
+        .insert({
+          tenant_id: tenantId,
+          customer_id: q.clientId || null,
+          created_by: session.user.id,
+          folio,
+          status: "Borrador",
+          total: Number(q.total || 0),
+          payload,
+          source_key: "version:" + crypto.randomUUID(),
+        })
+        .select(
+          "id,customer_id,created_by,folio,status,total,payload,created_at,source_key",
+        )
+        .single();
+      if (error) return notify(error.message || "No se pudo duplicar");
+      setProposals((v) => [quoteFromCloud(data), ...v]);
+      notify("Nueva versión compartida");
+      return;
+    }
+    persist("msp_proposals", setProposals, [copy, ...proposals]);
+    notify("Nueva versión creada");
+  };
+  const deleteProposal = async (id) => {
+    if (orders.some((o) => String(o.proposalId) === String(id)))
+      return notify("Propuesta ligada a pedido: no se puede eliminar");
+    if (!confirm("¿Eliminar esta propuesta?")) return;
+    const target = proposals.find((q) => q.id === id);
+    if (target?.cloud && session?.user && tenantId) {
+      const { error } = await supabase
+        .from("quotes")
+        .delete()
+        .eq("id", id)
+        .eq("tenant_id", tenantId);
+      if (error) return notify(error.message || "No se pudo eliminar");
+      setProposals((v) => v.filter((q) => q.id !== id));
+      notify("Cotización eliminada de la empresa");
+      return;
+    }
+    persist(
+      "msp_proposals",
+      setProposals,
+      proposals.filter((q) => q.id !== id),
+    );
+    notify("Propuesta eliminada");
+  };
+  const allowedOrderTransitions = {
+    Nuevo: ["Producción"],
+    Producción: ["Listo"],
+    Listo: ["Entregado"],
+    Entregado: [],
+  };
+  const changeOrderStatus = (id, status) => {
+    const current = orders.find((o) => o.id === id);
+    if (!current) return;
+    if (!allowedOrderTransitions[current.status]?.includes(status))
+      return notify("Avanza el pedido siguiendo el flujo de producción");
+    persist(
+      "msp_orders",
+      setOrders,
+      orders.map((o) =>
+        o.id === id ? { ...o, status, statusAt: new Date().toISOString() } : o,
+      ),
+    );
+    notify("Pedido: " + status);
+  };
+  const makeOrder = async (q) => {
+    if (q.status !== "Aprobado") return notify("Primero aprueba la cotización");
+    if (
+      orders.some(
+        (o) => String(o.proposalId) === String(q.id) && o.cloudOrderId,
+      )
+    )
+      return notify("Este pedido ya existe y está en Producción");
+    return createProductionOrder(q);
+  };
+  const approveAndOrder = async (id) => approve(id);
+  const proposalText = () => {
+    const c = clients.find((z) => String(z.id) === String(selectedClient));
+    return `Hola ${c?.name || ""}. Te compartimos una propuesta de ${company.name} realizada con MockuPro.\n\nProducto: ${product.name}\nCantidad: ${qty} piezas\nÁrea: ${placement}\nTotal: $${total.toFixed(2)} MXN\n\nLa imagen corresponde a una vista previa y no constituye arte final de producción.\n\nQuedamos atentos a tu aprobación o cambios.`;
+  };
+  const share = () => {
+    const c = clients.find((z) => String(z.id) === String(selectedClient)),
+      phone = (c?.phone || "").replace(/\D/g, "");
+    if (!c) {
+      notify("Selecciona un cliente antes de enviar");
+      return;
+    }
+    if (!phone) {
+      notify("El cliente no tiene teléfono registrado");
+      return;
+    }
+    window.open(
+      "https://wa.me/" + phone + "?text=" + encodeURIComponent(proposalText()),
+      "_blank",
+    );
+  };
+  const emailShare = () => {
+    const c = clients.find((z) => String(z.id) === String(selectedClient));
+    if (!c) {
+      notify("Selecciona un cliente antes de enviar");
+      return;
+    }
+    if (!c.email) {
+      notify("El cliente no tiene correo registrado");
+      return;
+    }
+    window.location.href =
+      "mailto:" +
+      c.email +
+      "?subject=" +
+      encodeURIComponent("Propuesta " + product.name + " | " + company.name) +
+      "&body=" +
+      encodeURIComponent(proposalText());
+  };
+  const escHtml = (v) =>
+    String(v ?? "").replace(
+      /[&<>"']/g,
+      (c) =>
+        ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        })[c],
+    );
+  const printQuote = () => {
+    const w = window.open("", "_blank");
+    if (!w) return;
+    const c = clients.find((z) => String(z.id) === String(selectedClient));
+    const html = `<!doctype html><meta charset="utf-8"><title>Cotización MockuPro</title><style>body{font-family:Arial;padding:40px;color:#101828;max-width:900px;margin:auto}.head{background:#07111f;color:white;padding:24px;border-radius:16px}.pro{color:#1597ff}.preview{margin:24px 0;padding:24px;border:1px solid #dbe2ea;border-radius:16px;text-align:center}.mockproduct{position:relative;width:360px;height:300px;max-width:100%;margin:0 auto 14px;background:${escHtml(productColor)};border-radius:16px;overflow:hidden}.mockproduct .base{position:absolute;inset:7%;width:86%;height:86%;object-fit:${fitMode === "cover" ? "cover" : "contain"};object-position:${Number(photoX)}% ${Number(photoY)}%}.mockproduct .clientlogo{position:absolute;width:${Number(size)}%;left:${Number(x)}%;top:${Number(y)}%;max-height:45%;object-fit:contain;opacity:${Number(logoOpacity) / 100};mix-blend-mode:${escHtml(blendMode)};transform:translate(-50%,-50%) rotate(${Number(rotation)}deg) skewX(${Number(skewX)}deg) skewY(${Number(skewY)}deg)}table{width:100%;border-collapse:collapse;margin:25px 0}td{padding:10px;border-bottom:1px solid #ddd}.total{text-align:right;font-size:24px}.warn{color:#b42318;font-weight:bold}</style><div class="head"><h1>Mocku<span class="pro">Pro</span></h1><div>DISEÑA | COTIZA | VENDE</div><h2>${escHtml(company.name)}</h2><p>${escHtml([company.phone, company.email].filter(Boolean).join(" · "))}</p></div><h2>Propuesta visual y cotización</h2><p>Cliente: ${escHtml(c?.name || "Sin asignar")}</p><p style="color:#667085">Preparada con MockuPro · presentación comercial profesional</p><div class="preview">${logo ? `<div class="mockproduct">${product.image ? `<img class="base" src="${escHtml(new URL(product.image, location.href).href)}">` : ""}<img class="clientlogo" src="${escHtml(logo)}"></div><p>${escHtml(product.name)} · ${escHtml(placement)}</p><small class="warn">VISTA PREVIA · NO IMPRIMIR</small>` : "<p>Sin mockup cargado</p>"}</div><table><tr><td>Producto</td><td>${escHtml(product.name)}</td></tr><tr><td>Cantidad</td><td>${qty}</td></tr><tr><td>Precio unitario</td><td>$${Number(product.price).toFixed(2)}</td></tr><tr><td>Descuento</td><td>${discount}%</td></tr></table><p class="total"><b>Total $${total.toFixed(2)} MXN</b></p><small>Propuesta comercial. La vista previa no constituye arte final de producción.</small>`;
+    w.document.write(html);
+    w.document.close();
+    w.print();
+  };
+  const exportPreview = () => {
+    if (!logo) return notify("Carga un logo primero");
+    const esc = (v) =>
+        String(v ?? "").replace(
+          /[&<>"]/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+        ),
+      px = (x - size / 2) * 12,
+      py = (y - size / 2) * 8,
+      pw = size * 12,
+      ph = size * 8,
+      cx = px + pw / 2,
+      cy = py + ph / 2,
+      base = product.image
+        ? '<image href="' +
+          esc(product.image) +
+          '" x="70" y="105" width="1060" height="600" preserveAspectRatio="xMidYMid ' +
+          (fitMode === "cover" ? "slice" : "meet") +
+          '"/>'
+        : "";
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800"><rect width="100%" height="100%" fill="${esc(productColor)}"/>${base}<rect x="70" y="105" width="1060" height="600" fill="none" stroke="#d8e0e8"/><text x="600" y="48" text-anchor="middle" font-family="Arial" font-size="28" font-weight="bold">${esc(product.name)}</text><text x="600" y="78" text-anchor="middle" font-family="Arial" font-size="16">${esc(placement)} · MockuPro</text><image href="${esc(logo)}" x="${px}" y="${py}" width="${pw}" height="${ph}" preserveAspectRatio="xMidYMid meet" opacity="${logoOpacity / 100}" style="mix-blend-mode:${esc(blendMode)}" transform="rotate(${rotation} ${cx} ${cy}) skewX(${skewX}) skewY(${skewY})"/><text x="600" y="760" text-anchor="middle" font-family="Arial" font-size="16" fill="#52667a">VISTA PREVIA · NO IMPRIMIR</text></svg>`;
+    const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" })),
+      a = document.createElement("a");
+    a.href = url;
+    a.download =
+      "mockup-" +
+      product.name.toLowerCase().replace(/[^a-z0-9]+/g, "-") +
+      ".svg";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    notify("Mockup exportado con producto y diseño");
+  };
+  const daysSince = (v) => {
+    if (!v) return 0;
+    const t = new Date(v).getTime();
+    return Number.isFinite(t)
+      ? Math.max(0, Math.floor((Date.now() - t) / 86400000))
+      : 0;
+  };
+  const needsFollowUp = (q) =>
+    q.status === "Enviada" && daysSince(q.statusAt || q.createdAt) >= 2;
+  const quoteStatuses = [
+    "Todos",
+    "Borrador",
+    "Enviada",
+    "Cambios solicitados",
+    "Aprobado",
+  ];
+  const statusCounts = quoteStatuses
+    .slice(1)
+    .reduce(
+      (a, v) => ((a[v] = proposals.filter((q) => q.status === v).length), a),
+      {},
+    );
+  const proposalGroups = proposals.reduce((a, q) => {
+    const k = String(q.parentId || q.id);
+    (a[k] || (a[k] = [])).push(q);
+    return a;
+  }, {});
+  const filteredClients = clients.filter((c) =>
+      (c.name + " " + (c.phone || "") + " " + (c.email || ""))
+        .toLowerCase()
+        .includes(search.toLowerCase()),
+    ),
+    filteredProducts = products.filter(
+      (p) => category === "Todos" || p.category === category,
+    ),
+    filteredProposals = proposals.filter((q) =>
+      (q.product + " " + (q.clientName || ""))
+        .toLowerCase()
+        .includes(search.toLowerCase()),
+    ),
+    visibleProposals =
+      quoteFilter === "Todos"
+        ? filteredProposals
+        : filteredProposals.filter((q) => q.status === quoteFilter);
+  const roleModules = {
+    tenant_admin: modules,
+    salesperson: modules.filter(([n]) => !["Producción", "Admin"].includes(n)),
+    catalog_manager: modules.filter(([n]) =>
+      ["Productos", "Catálogos", "Mockups"].includes(n),
+    ),
+    designer: modules.filter(([n]) =>
+      [
+        "Clientes",
+        "Productos",
+        "Catálogos",
+        "Mockups",
+        "Cotizaciones",
+        "Pedidos",
+      ].includes(n),
+    ),
+    production: modules.filter(([n]) =>
+      ["Productos", "Catálogos", "Pedidos", "Producción"].includes(n),
+    ),
+  };
+  const visibleModules = session?.user
+    ? roleModules[currentRole] || []
+    : modules;
+  useEffect(() => {
+    if (
+      session?.user &&
+      currentRole &&
+      active !== "Inicio" &&
+      !visibleModules.some(([name]) => name === active)
+    )
+      setActive("Inicio");
+  }, [active, currentRole, session?.user?.id]);
+  return (
+    <div className={"app role-" + (currentRole || "local")}>
+      <aside>
+        <div className="brandlogo">
+          <div className="brandmark">
+            <span className="brandM">M</span>
+            <span className="brandBox">⌁</span>
+            <span className="brandName">
+              Mocku<b>Pro</b>
+            </span>
+          </div>
+          <div className="brandBy">by Collector Labs</div>
+          <div className="brandTag">DISEÑA · COTIZA · VENDE</div>
+          <small>De la idea a la venta.</small>
+        </div>
+        <nav>
+          <button onClick={() => setActive("Inicio")}>
+            <Home size={18} />
+            Inicio
+          </button>
+          {visibleModules.map(([n, I]) => (
+            <button key={n} onClick={() => setActive(n)}>
+              <I size={18} />
+              {n}
+            </button>
+          ))}
+        </nav>
+      </aside>
+      <main>
+        {notice && <div className="notice">{notice}</div>}
+        <header>
+          <div>
+            <small>
+              {company.name}
+              {currentRole ? " · " + roleLabel(currentRole) : ""}
+            </small>
+            <h1>{active}</h1>
+          </div>
+          {canCreateQuotes && (
+            <button className="primary" onClick={() => setActive("Mockups")}>
+              <Plus size={18} />
+              Nuevo proyecto
+            </button>
+          )}
+        </header>
+        {active === "Inicio" && (
+          <>
+            <Dashboard
+              clients={clients}
+              proposals={proposals}
+              orders={orders}
+              onNavigate={setActive}
+            />
+            <section className="card company premiumCompany">
+              <h2>
+                <Building2 size={25} /> Datos de la empresa
+              </h2>
+              <div className="formrow">
+                <input
+                  value={company.name}
+                  onChange={(e) =>
+                    setCompany({ ...company, name: e.target.value })
+                  }
+                  placeholder="Empresa"
+                />
+                <input
+                  value={company.phone}
+                  onChange={(e) =>
+                    setCompany({ ...company, phone: e.target.value })
+                  }
+                  placeholder="WhatsApp"
+                />
+                <input
+                  value={company.email}
+                  onChange={(e) =>
+                    setCompany({ ...company, email: e.target.value })
+                  }
+                  placeholder="Correo"
+                />
+                <button
+                  onClick={() => {
+                    localStorage.setItem(
+                      "msp_company",
+                      JSON.stringify(company),
+                    );
+                    notify("Empresa guardada");
+                  }}
+                >
+                  Guardar empresa
+                </button>
+              </div>
+            </section>
+          </>
+        )}
+        {active === "Admin" && (
+          <section className="card adminModule">
+            <div className="adminHero">
+              <div>
+                <small>ADMINISTRACIÓN DE EMPRESA</small>
+                <h2>Equipo y permisos</h2>
+                <p>
+                  Una empresa puede operar con varios vendedores, diseño y
+                  producción sin compartir cuentas.
+                </p>
+              </div>
+              <span>{roleLabel(currentRole) || "Sin rol"}</span>
+            </div>
+            {currentRole !== "tenant_admin" ? (
+              <div className="restrictedPanel">
+                <ShieldCheck size={28} />
+                <b>Área exclusiva del administrador</b>
+                <p>Tu rol actual es {roleLabel(currentRole) || "usuario"}.</p>
+              </div>
+            ) : (
+              <>
+                <div className="inviteTeam">
+                  <input
+                    type="email"
+                    placeholder="Correo del nuevo integrante"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                  />
+                  <select
+                    value={inviteRole}
+                    onChange={(e) => setInviteRole(e.target.value)}
+                  >
+                    <option value="salesperson">Vendedor</option>
+                    <option value="catalog_manager">
+                      Encargado de catálogos
+                    </option>
+                    <option value="designer">Diseño / Mockups</option>
+                    <option value="production">Producción</option>
+                    <option value="tenant_admin">Administrador</option>
+                  </select>
+                  <button
+                    className="primary"
+                    disabled={adminBusy}
+                    onClick={inviteTeamMember}
+                  >
+                    {adminBusy ? "Procesando…" : "Invitar al equipo"}
+                  </button>
+                </div>
+                <div className="teamList">
+                  {teamMembers.map((m) => (
+                    <div className="teamRow" key={m.user_id}>
+                      <div>
+                        <b>
+                          {m.profile?.display_name ||
+                            m.profile?.email ||
+                            "Usuario"}
+                        </b>
+                        <small>
+                          {m.profile?.email || m.user_id}
+                          {m.user_id === session?.user?.id
+                            ? " · TU CUENTA"
+                            : ""}
+                        </small>
+                      </div>
+                      <div className="teamRoleActions">
+                        <select
+                          disabled={
+                            adminBusy || m.user_id === session?.user?.id
+                          }
+                          value={m.role}
+                          onChange={(e) =>
+                            changeMemberRole(m.user_id, e.target.value)
+                          }
+                        >
+                          <option value="tenant_admin">Administrador</option>
+                          <option value="catalog_manager">
+                            Encargado de catálogos
+                          </option>
+                          <option value="salesperson">Vendedor</option>
+                          <option value="designer">Diseño / Mockups</option>
+                          <option value="production">Producción</option>
+                        </select>
+                        {m.user_id !== session?.user?.id && (
+                          <button
+                            className="dangerlink"
+                            disabled={adminBusy}
+                            onClick={() => removeMember(m.user_id)}
+                          >
+                            Retirar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </section>
+        )}
+        {active === "Producción" && (
+          <section className="card productionModule">
+            <div className="catalogHeader">
+              <div>
+                <h2>Producción</h2>
+                <p>
+                  Pedido aprobado → proveedor → material → producción → calidad
+                  → entrega.
+                </p>
+              </div>
+              <span className="betaBadge">
+                {canManageProduction ? "OPERACIÓN" : "SEGUIMIENTO"}
+              </span>
+            </div>
+            {canManageProduction && (
+              <div className="supplierPanel">
+                <div className="supplierPanelHead">
+                  <div>
+                    <h3>Proveedores</h3>
+                    <small>Alta rápida para surtir pedidos.</small>
+                  </div>
+                  <span>{suppliers.length} activos</span>
+                </div>
+                <div className="supplierForm">
+                  <input
+                    placeholder="Proveedor *"
+                    value={supplierForm.name}
+                    onChange={(e) =>
+                      setSupplierForm({ ...supplierForm, name: e.target.value })
+                    }
+                  />
+                  <input
+                    placeholder="Contacto"
+                    value={supplierForm.contact_name}
+                    onChange={(e) =>
+                      setSupplierForm({
+                        ...supplierForm,
+                        contact_name: e.target.value,
+                      })
+                    }
+                  />
+                  <input
+                    placeholder="Teléfono"
+                    value={supplierForm.phone}
+                    onChange={(e) =>
+                      setSupplierForm({
+                        ...supplierForm,
+                        phone: e.target.value,
+                      })
+                    }
+                  />
+                  <input
+                    type="email"
+                    placeholder="Correo"
+                    value={supplierForm.email}
+                    onChange={(e) =>
+                      setSupplierForm({
+                        ...supplierForm,
+                        email: e.target.value,
+                      })
+                    }
+                  />
+                  <button
+                    className="primary"
+                    disabled={productionBusy === "supplier"}
+                    onClick={addSupplier}
+                  >
+                    {productionBusy === "supplier"
+                      ? "Guardando…"
+                      : "Agregar proveedor"}
+                  </button>
+                </div>
+                {suppliers.length > 0 && (
+                  <div className="supplierChips">
+                    {suppliers.slice(0, 12).map((s) => (
+                      <span key={s.id}>{s.name}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {productionJobs.length === 0 ? (
+              <div className="emptyProduction">
+                <Factory size={34} />
+                <b>No hay trabajos de producción pendientes</b>
+                <p>
+                  Cuando una cotización se apruebe, su pedido aparecerá
+                  automáticamente aquí.
+                </p>
+              </div>
+            ) : (
+              <div className="productionQueue">
+                {productionJobs.map((j) => {
+                  const d = purchaseDrafts[j.id] || {},
+                    pos = purchaseOrders.filter(
+                      (po) => String(po.order_id) === String(j.order_id),
+                    ),
+                    items = j.orders?.order_items || [];
+                  return (
+                    <article className="productionJobCard" key={j.id}>
+                      <div className="productionJobTop">
+                        <div>
+                          <b>
+                            {j.orders?.folio ||
+                              "Pedido " + String(j.order_id).slice(0, 8)}
+                          </b>
+                          <small>
+                            {[
+                              j.orders?.payload?.clientName,
+                              j.orders?.payload?.productName,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ") || "Pedido MockuPro"}
+                          </small>
+                        </div>
+                        <span
+                          className={
+                            "productionStatus " +
+                            String(j.status).toLowerCase().replace(/\s+/g, "-")
+                          }
+                        >
+                          {j.status}
+                        </span>
+                      </div>
+                      <div className="productionMeta">
+                        <span>
+                          {items.reduce((a, i) => a + Number(i.qty || 0), 0) ||
+                            1}{" "}
+                          pzas
+                        </span>
+                        <span>
+                          {"MXN " + Number(j.orders?.total || 0).toFixed(2)}
+                        </span>
+                        <span>Prioridad {j.priority}</span>
+                      </div>
+                      {items.length > 0 && (
+                        <div className="productionItems">
+                          {items.map((i) => (
+                            <div key={i.id}>
+                              <b>{i.description}</b>
+                              <span>{i.qty} pzas</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {pos.length > 0 && (
+                        <div className="purchaseOrders">
+                          {pos.map((po) => (
+                            <div className="purchaseOrderCard" key={po.id}>
+                              <div>
+                                <b>{po.folio}</b>
+                                <small>
+                                  {po.suppliers?.name || "Proveedor"} ·{" "}
+                                  {po.status}
+                                  {Number(po.cost_total) > 0
+                                    ? " · Costo MXN " +
+                                      Number(po.cost_total).toFixed(2)
+                                    : ""}
+                                </small>
+                                {po.supplier_reference && (
+                                  <small>Ref. {po.supplier_reference}</small>
+                                )}
+                              </div>
+                              {canManageProduction && (
+                                <div className="purchaseActions">
+                                  {po.status === "Solicitado" && (
+                                    <>
+                                      <button
+                                        disabled={productionBusy === po.id}
+                                        onClick={() =>
+                                          updateSupplierOrder(po, "Confirmado")
+                                        }
+                                      >
+                                        Confirmar
+                                      </button>
+                                      <button
+                                        disabled={productionBusy === po.id}
+                                        onClick={() =>
+                                          updateSupplierOrder(po, "Parcial")
+                                        }
+                                      >
+                                        Parcial
+                                      </button>
+                                      <button
+                                        className="primary"
+                                        disabled={productionBusy === po.id}
+                                        onClick={() =>
+                                          updateSupplierOrder(po, "Recibido")
+                                        }
+                                      >
+                                        Recibido
+                                      </button>
+                                    </>
+                                  )}
+                                  {po.status === "Confirmado" && (
+                                    <>
+                                      <button
+                                        disabled={productionBusy === po.id}
+                                        onClick={() =>
+                                          updateSupplierOrder(po, "Parcial")
+                                        }
+                                      >
+                                        Parcial
+                                      </button>
+                                      <button
+                                        className="primary"
+                                        disabled={productionBusy === po.id}
+                                        onClick={() =>
+                                          updateSupplierOrder(po, "Recibido")
+                                        }
+                                      >
+                                        Recibido
+                                      </button>
+                                    </>
+                                  )}
+                                  {po.status === "Parcial" && (
+                                    <button
+                                      className="primary"
+                                      disabled={productionBusy === po.id}
+                                      onClick={() =>
+                                        updateSupplierOrder(po, "Recibido")
+                                      }
+                                    >
+                                      Completar recepción
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {canManageProduction && (
+                        <div className="productionActions">
+                          {j.status === "Pendiente" && (
+                            <button
+                              className="primary"
+                              disabled={productionBusy === j.id}
+                              onClick={() => advanceProduction(j, "Revisión")}
+                            >
+                              Revisar pedido
+                            </button>
+                          )}
+                          {j.status === "Revisión" && (
+                            <>
+                              <div className="supplierOrderForm">
+                                <select
+                                  value={d.supplierId || ""}
+                                  onChange={(e) =>
+                                    updatePurchaseDraft(j.id, {
+                                      supplierId: e.target.value,
+                                    })
+                                  }
+                                >
+                                  <option value="">
+                                    Seleccionar proveedor…
+                                  </option>
+                                  {suppliers.map((s) => (
+                                    <option key={s.id} value={s.id}>
+                                      {s.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step=".01"
+                                  placeholder="Costo proveedor (opcional)"
+                                  value={d.costTotal || ""}
+                                  onChange={(e) =>
+                                    updatePurchaseDraft(j.id, {
+                                      costTotal: e.target.value,
+                                    })
+                                  }
+                                />
+                                <input
+                                  placeholder="Referencia / cotización proveedor"
+                                  value={d.reference || ""}
+                                  onChange={(e) =>
+                                    updatePurchaseDraft(j.id, {
+                                      reference: e.target.value,
+                                    })
+                                  }
+                                />
+                                <input
+                                  type="datetime-local"
+                                  value={d.expectedAt || ""}
+                                  onChange={(e) =>
+                                    updatePurchaseDraft(j.id, {
+                                      expectedAt: e.target.value,
+                                    })
+                                  }
+                                />
+                                <button
+                                  disabled={
+                                    productionBusy === j.id || !d.supplierId
+                                  }
+                                  onClick={() => createSupplierOrder(j)}
+                                >
+                                  Solicitar a proveedor
+                                </button>
+                              </div>
+                              <button
+                                className="primary"
+                                disabled={productionBusy === j.id}
+                                onClick={() =>
+                                  advanceProduction(j, "En producción")
+                                }
+                              >
+                                Usar stock / iniciar producción
+                              </button>
+                            </>
+                          )}
+                          {j.status === "Material recibido" && (
+                            <button
+                              className="primary"
+                              disabled={productionBusy === j.id}
+                              onClick={() =>
+                                advanceProductio…2831 tokens truncated…                       type="email"
+                          placeholder="Correo del vendedor"
+                          value={sellerEmail}
+                          onChange={(e) => setSellerEmail(e.target.value)}
+                        />
+                        <button type="button" onClick={sendSellerAccess}>
+                          Activar acceso IA
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <select
+                  value={productForm.surface}
+                  onChange={(e) =>
+                    setProductForm({ ...productForm, surface: e.target.value })
+                  }
+                >
+                  <option value="fabric">Tela</option>
+                  <option value="ceramic">Cerámica</option>
+                  <option value="matte">Mate / rígido</option>
+                  <option value="paper">Papel</option>
+                </select>
+                <button className="primary" onClick={addProduct}>
+                  Guardar producto
+                </button>
+              </div>
+            ) : (
+              <p className="readonlyNote">
+                Catálogo en modo consulta. La edición corresponde a
+                Administración o Catálogos.
+              </p>
+            )}
+            <div className="filters">
+              {["Todos", ...new Set(products.map((p) => p.category))].map(
+                (c) => (
+                  <button
+                    className={category === c ? "selected" : ""}
+                    key={c}
+                    onClick={() => setCategory(c)}
+                  >
+                    {c}
+                  </button>
+                ),
+              )}
+            </div>
+            <div className="products">
+              {filteredProducts.map((p) => (
+                <div className="productcard" key={p.id}>
+                  <button
+                    onClick={() => {
+                      setProduct(p);
+                      setActive("Mockups");
+                    }}
+                  >
+                    <div className="productvisual">
+                      {p.image ? (
+                        <img src={p.image} alt={p.name} />
+                      ) : (
+                        <span aria-hidden="true">{p.visual || "◫"}</span>
+                      )}
+                      <span
+                        className={
+                          "assetbadge " +
+                          (isPhotoAsset(p) ? "photo" : "template")
+                        }
+                      >
+                        {isPhotoAsset(p) ? "FOTO" : "PLANTILLA"}
+                      </span>
+                    </div>
+                    <b>{p.name}</b>
+                    <span>{p.category}</span>
+                    <strong>{"$" + Number(p.price || 0).toFixed(2)}</strong>
+                    <small>Crear mockup →</small>
+                  </button>
+                  {canManageProducts && (
+                    <div className="productCardActions">
+                      <label className="replacePhotoBtn">
+                        Cambiar foto
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          onChange={(e) => replaceProductPhoto(p.id, e)}
+                        />
+                      </label>
+                      <button
+                        className="dangerlink"
+                        onClick={() => deleteProduct(p.id)}
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+        {active === "Catálogos" && (
+          <section className="card catalogModule">
+            <div className="catalogHeader">
+              <div>
+                <h2>Catálogos PDF</h2>
+                <p>
+                  Un catálogo se carga una vez y queda disponible para todos los
+                  vendedores de la empresa.
+                </p>
+              </div>
+              <span className="betaBadge">
+                {session?.user ? "NUBE" : "LOCAL"}
+              </span>
+            </div>
+            {session?.user && (
+              <div className="catalogCloudNote">
+                <b>Catálogo compartido por empresa</b>
+                <span>
+                  {canManageCatalogs
+                    ? "Puedes publicar, reemplazar, archivar y eliminar catálogos."
+                    : "Puedes consultar todos los catálogos activos de tu empresa."}
+                </span>
+              </div>
+            )}
+            {canManageCatalogs && (
+              <div className="catalogUpload">
+                <input
+                  placeholder="Marca o proveedor * (ej. Yazbek, BIC, Promoline)"
+                  value={catalogBrand}
+                  onChange={(e) => setCatalogBrand(e.target.value)}
+                />
+                <label
+                  className={
+                    "catalogPdfButton " + (catalogBusy ? "disabled" : "")
+                  }
+                >
+                  <Upload size={17} />
+                  {catalogBusy ? "Procesando…" : "Subir / actualizar PDF"}
+                  <input
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    disabled={catalogBusy}
+                    onChange={indexCatalogPdf}
+                  />
+                </label>
+              </div>
+            )}
+            {catalogProgress && (
+              <div className="catalogProgress">{catalogProgress}</div>
+            )}
+            <div className="catalogSearchBox">
+              <input
+                placeholder="Buscar por marca, modelo, ID, SKU, nombre o palabra clave…"
+                value={catalogQuery}
+                onChange={(e) => setCatalogQuery(e.target.value)}
+              />
+              <small>
+                {catalogSearchBusy
+                  ? "Buscando en los catálogos de la empresa…"
+                  : "Ejemplos: Yazbek 0200 · BIC 102 · taza 11 oz · llavero K45"}
+              </small>
+            </div>
+            {catalogQuery.trim() ? (
+              <div className="catalogResults">
+                <div className="catalogResultSummary">
+                  <b>{catalogResults.length}</b> coincidencias{" "}
+                  {session?.user
+                    ? "en catálogos activos compartidos"
+                    : "en catálogos locales"}
+                </div>
+                {catalogResults.length === 0 && !catalogSearchBusy ? (
+                  <p>
+                    No encontré coincidencias. Prueba con el número exacto de
+                    modelo, marca o una palabra del producto.
+                  </p>
+                ) : (
+                  catalogResults.map((r, i) => (
+                    <button
+                      key={r.catalogId + "-" + r.page + "-" + i}
+                      className="catalogHit catalogHitVisual"
+                      onClick={() => openCatalogPage(r)}
+                    >
+                      {r.pageImageUrl && (
+                        <img
+                          src={r.pageImageUrl}
+                          alt={"Página " + r.page + " de " + r.catalogName}
+                        />
+                      )}
+                      <div className="catalogHitCopy">
+                        <div>
+                          <b>
+                            {r.brand} · {r.catalogName}
+                          </b>
+                          <span>Página {r.page}</span>
+                        </div>
+                        <p>{catalogSnippet(r.text, catalogQuery)}</p>
+                        <small>Abrir PDF directamente en esta página →</small>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            ) : (
+              <div className="catalogLibrary">
+                <h3>Biblioteca de catálogos</h3>
+                {catalogs.length === 0 ? (
+                  <p>
+                    Aún no hay catálogos compartidos. El administrador o
+                    encargado de catálogos puede cargar el primero.
+                  </p>
+                ) : (
+                  catalogs.map((cat) => (
+                    <div
+                      className={"catalogRow " + (cat.status || "active")}
+                      key={cat.id}
+                    >
+                      <div>
+                        <b>{cat.brand}</b>
+                        <span>{cat.name}</span>
+                        <small>
+                          {cat.totalPages || 0} páginas ·{" "}
+                          {(Number(cat.bytes || 0) / 1024 / 1024).toFixed(1)} MB
+                          ·{" "}
+                          {cat.status === "active"
+                            ? "ACTIVO"
+                            : cat.status === "archived"
+                              ? "ARCHIVADO"
+                              : String(cat.status || "").toUpperCase()}
+                        </small>
+                      </div>
+                      <div className="actions">
+                        <button
+                          onClick={() => openCatalogPage({ ...cat, page: 1 })}
+                        >
+                          Abrir PDF
+                        </button>
+                        {canManageCatalogs && cat.status === "active" && (
+                          <button onClick={() => archiveCatalog(cat.id)}>
+                            Archivar
+                          </button>
+                        )}
+                        {canManageCatalogs && (
+                          <button
+                            className="dangerlink"
+                            onClick={() => removeCatalog(cat.id)}
+                          >
+                            Eliminar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </section>
+        )}
+        {active === "Mockups" && (
+          <>
+            <section className="grid">
+              <div className="card">
+                <h2>Editor de mockup</h2>
+                <label>
+                  Cliente
+                  <select
+                    value={selectedClient}
+                    onChange={(e) => setSelectedClient(e.target.value)}
+                  >
+                    <option value="">Sin asignar</option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Área de personalización
+                  <select
+                    value={placement}
+                    onChange={(e) => choosePlacement(e.target.value)}
+                  >
+                    {productPlacements(product).map((v) => (
+                      <option key={v}>{v}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="drop">
+                  <Upload />
+                  <b>Cargar logo</b>
+                  <input type="file" accept="image/*,.svg" onChange={upload} />
+                </label>
+                <select
+                  value={product.id}
+                  onChange={(e) => {
+                    const p =
+                      products.find((z) => String(z.id) === e.target.value) ||
+                      products[0];
+                    setProduct(p);
+                    setPlacement("Frente");
+                    const d = productPreset(p, "Frente");
+                    setX(d[0]);
+                    setY(d[1]);
+                    setSize(d[2]);
+                    setSkewX(d[3]);
+                    setSkewY(d[4]);
+                    setBlendMode(d[5]);
+                  }}
+                >
+                  {products.map((z) => (
+                    <option value={z.id} key={z.id}>
+                      {z.name}
+                    </option>
+                  ))}
+                </select>
+                <label>
+                  Tamaño
+                  <input
+                    type="range"
+                    min="10"
+                    max="75"
+                    value={size}
+                    onChange={(e) => setSize(Number(e.target.value))}
+                  />
+                </label>
+                <label>
+                  Horizontal
+                  <input
+                    type="range"
+                    min="10"
+                    max="90"
+                    value={x}
+                    onChange={(e) => setX(Number(e.target.value))}
+                  />
+                </label>
+                <label>
+                  Vertical
+                  <input
+                    type="range"
+                    min="15"
+                    max="85"
+                    value={y}
+                    onChange={(e) => setY(Number(e.target.value))}
+                  />
+                </label>
+                <label>
+                  Rotación {rotation}°
+                  <input
+                    type="range"
+                    min="-30"
+                    max="30"
+                    value={rotation}
+                    onChange={(e) => setRotation(Number(e.target.value))}
+                  />
+                </label>
+                <label>
+                  Integración con superficie <b>{realism}%</b>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={realism}
+                    onChange={(e) => setRealism(Number(e.target.value))}
+                  />
+                </label>
+                <label>
+                  Perspectiva horizontal {skewX}°
+                  <input
+                    type="range"
+                    min="-18"
+                    max="18"
+                    value={skewX}
+                    onChange={(e) => setSkewX(Number(e.target.value))}
+                  />
+                </label>
+                <label>
+                  Perspectiva vertical {skewY}°
+                  <input
+                    type="range"
+                    min="-12"
+                    max="12"
+                    value={skewY}
+                    onChange={(e) => setSkewY(Number(e.target.value))}
+                  />
+                </label>
+                <label>
+                  Opacidad de impresión <b>{logoOpacity}%</b>
+                  <input
+                    type="range"
+                    min="55"
+                    max="100"
+                    value={logoOpacity}
+                    onChange={(e) => setLogoOpacity(Number(e.target.value))}
+                  />
+                </label>
+                <label>
+                  Ajuste de fotografía
+                  <select
+                    value={fitMode}
+                    onChange={(e) => setFitMode(e.target.value)}
+                  >
+                    <option value="contain">Producto completo</option>
+                    <option value="cover">Llenar encuadre</option>
+                  </select>
+                </label>
+                <label>
+                  Foto horizontal
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={photoX}
+                    onChange={(e) => setPhotoX(Number(e.target.value))}
+                  />
+                </label>
+                <label>
+                  Foto vertical
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={photoY}
+                    onChange={(e) => setPhotoY(Number(e.target.value))}
+                  />
+                </label>
+                <label>
+                  Presentación
+                  <select
+                    value={viewMode}
+                    onChange={(e) => setViewMode(e.target.value)}
+                  >
+                    <option>Estudio</option>
+                    <option>Catálogo</option>
+                    <option>Cliente</option>
+                  </select>
+                </label>
+                <label>
+                  Zoom de producto <b>{Math.round(zoom * 100)}%</b>
+                  <input
+                    type="range"
+                    min="80"
+                    max="125"
+                    value={Math.round(zoom * 100)}
+                    onChange={(e) => setZoom(Number(e.target.value) / 100)}
+                  />
+                </label>
+                <label>
+                  Modo de impresión
+                  <select
+                    value={blendMode}
+                    onChange={(e) => setBlendMode(e.target.value)}
+                  >
+                    <option value="multiply">Tinta / serigrafía</option>
+                    <option value="normal">Vinil / transfer</option>
+                    <option value="overlay">Integrado a textura</option>
+                  </select>
+                </label>
+                <label>
+                  Color del producto
+                  <input
+                    type="color"
+                    value={productColor}
+                    onChange={(e) => setProductColor(e.target.value)}
+                  />
+                </label>
+                <label>
+                  Notas del cliente
+                  <textarea
+                    rows="3"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Ej. logo más pequeño, entrega viernes..."
+                  />
+                </label>
+                <button className="primary" onClick={saveProposal}>
+                  Guardar propuesta
+                </button>
+                <button onClick={resetEditor}>Restablecer editor</button>
+                <button onClick={exportPreview} disabled={!logo}>
+                  Exportar vista previa
+                </button>
+                <button onClick={share}>
+                  <Send size={16} />
+                  WhatsApp
+                </button>
+                <button onClick={emailShare}>Correo</button>
+              </div>
+              <div
+                className={
+                  "card previewcard" + (presentation ? " presentation" : "")
+                }
+              >
+                <h2>Vista previa</h2>
+                <div className="dragtip">
+                  Arrastra el logo directamente sobre el producto. También
+                  funciona con el dedo. Para venta usa fotos reales, bien
+                  iluminadas y de preferencia de 900 px o más; la perspectiva
+                  ahora se aplica también al logo final.
+                </div>
+                <div className="mockactions">
+                  <button
+                    className="comparebtn"
+                    onClick={() => setCompare((v) => !v)}
+                  >
+                    {compare
+                      ? "Ocultar comparación"
+                      : "Comparar antes / después"}
+                  </button>
+                  <button
+                    className={"comparebtn " + (favorite ? "selected" : "")}
+                    onClick={() => {
+                      setFavorite((v) => !v);
+                      notify(
+                        favorite
+                          ? "Propuesta desmarcada"
+                          : "Propuesta destacada para presentar",
+                      );
+                    }}
+                  >
+                    {favorite ? "★ Seleccionada" : "☆ Destacar propuesta"}
+                  </button>
+                </div>
+                {compare && (
+                  <div className="comparepanel">
+                    <div>
+                      <b>ANTES</b>
+                      {product.image ? (
+                        <img
+                          src={product.image}
+                          alt={"Producto sin personalizar " + product.name}
+                        />
+                      ) : (
+                        <span>Sin foto</span>
+                      )}
+                    </div>
+                    <div>
+                      <b>PROPUESTA</b>
+                      {product.image ? (
+                        <img
+                          src={product.image}
+                          alt={"Producto personalizado " + product.name}
+                        />
+                      ) : null}
+                      {logo && (
+                        <img
+                          className="comparelogo"
+                          src={logo}
+                          alt="Logo aplicado"
+                          style={{
+                            width: size + "%",
+                            left: x + "%",
+                            top: y + "%",
+                            opacity: logoOpacity / 100,
+                            mixBlendMode: blendMode,
+                            transform:
+                              "translate(-50%,-50%) rotate(" +
+                              rotation +
+                              "deg) skew(" +
+                              skewX +
+                              "deg," +
+                              skewY +
+                              "deg)",
+                          }}
+                        />
+                      )}
+                    </div>
+                  </div>
+                )}
+                <button
+                  className="presentbtn"
+                  onClick={() => setPresentation(!presentation)}
+                >
+                  {presentation
+                    ? "Cerrar presentación"
+                    : "Presentar al cliente"}
+                </button>
+                {presentation && (
+                  <>
+                    <div className="presentbrand">
+                      <img src="./mockupro-logo.svg" alt="MockuPro" />
+                      <span>Propuesta visual</span>
+                    </div>
+                    <div className="presentactions">
+                      <button onClick={share}>Enviar por WhatsApp</button>
+                      <button onClick={printQuote}>Cotización / PDF</button>
+                    </div>
+                    <div className="presenthint">
+                      ¿Te gusta esta propuesta? Registra la respuesta del
+                      cliente aquí.
+                    </div>
+                    <div className="clientdecision">
+                      <button
+                        onClick={() => {
+                          const q = proposals.find(
+                            (p) =>
+                              String(p.clientId) === String(selectedClient) &&
+                              p.productId === product.id,
+                          );
+                          if (!q) return notify("Guarda primero la propuesta");
+                          approveAndOrder(q.id);
+                        }}
+                      >
+                        ✓ Aprobar y crear pedido
+                      </button>
+                      <button
+                        onClick={() => {
+                          const q = proposals.find(
+                            (p) =>
+                              String(p.clientId) === String(selectedClient) &&
+                              p.productId === product.id,
+                          );
+                          if (!q) return notify("Guarda primero la propuesta");
+                          setProposalStatus(q.id, "Cambios solicitados");
+                        }}
+                      >
+                        ↻ Solicita cambios
+                      </button>
+                    </div>
+                    <div className="presentmeta">
+                      <div>
+                        <small>CLIENTE</small>
+                        <b>
+                          {clients.find(
+                            (c) => String(c.id) === String(selectedClient),
+                          )?.name || "Cliente"}
+                        </b>
+                      </div>
+                      <div>
+                        <small>PRODUCTO</small>
+                        <b>{product.name}</b>
+                      </div>
+                      <div>
+                        <small>CANTIDAD</small>
+                        <b>{qty} pzas</b>
+                      </div>
+                      <div>
+                        <small>TOTAL</small>
+                        <b>${total.toFixed(2)} MXN</b>
+                      </div>
+                    </div>
+                  </>
+                )}
+                <div
+                  className={
+                    "mock surface-" +
+                    (product.surface || "matte") +
+                    " view-" +
+                    viewMode.toLowerCase() +
+                    " asset-" +
+                    (isPhotoAsset(product) ? "photo" : "template")
+                  }
+                  style={{ background: productColor }}
+                >
+                  <div className="studio-light" aria-hidden="true" />
+                  <div className="productname">{product.name}</div>
+                  <div className="realbadge">
+                    {viewMode === "Cliente"
+                      ? "PROPUESTA PARA CLIENTE"
+                      : "PREVISUALIZACIÓN REALISTA"}
+                  </div>
+                  {product.image && (
+                    <img
+                      className="productbase"
+                      src={product.image}
+                      alt={product.name}
+                      style={{
+                        transform: "scale(" + zoom + ")",
+                        objectFit: fitMode,
+                        objectPosition: photoX + "% " + photoY + "%",
+                      }}
+                    />
+                  )}{" "}
+                  {product.surface === "fabric" && (
+                    <div className="printzone" aria-hidden="true">
+                      <span>ÁREA DE IMPRESIÓN</span>
+                    </div>
+                  )}{" "}
+                  {logo ? (
+                    <>
+                      <img
+                        className="logo-shadow"
+                        src={logo}
+                        aria-hidden="true"
+                        style={{
+                          width: size + "%",
+                          left: x + "%",
+                          top: y + "%",
+                          opacity: (realism / 100) * 0.22,
+                          filter: "blur(" + realism / 55 + "px)",
+                          transform:
+                            "translate(-50%,-50%) rotate(" +
+                            rotation +
+                            "deg) skew(" +
+                            skewX +
+                            "deg," +
+                            skewY +
+                            "deg)",
+                        }}
+                      />
+                      <img
+                        className={
+                          "customerlogo draggablelogo" +
+                          (dragging ? " dragging" : "")
+                        }
+                        src={logo}
+                        alt="Logo del cliente; arrastra para posicionar"
+                        draggable="false"
+                        onPointerDown={startLogoDrag}
+                        onPointerMove={dragLogo}
+                        onPointerUp={stopLogoDrag}
+                        onPointerCancel={stopLogoDrag}
+                        style={{
+                          width: size + "%",
+                          left: x + "%",
+                          top: y + "%",
+                          opacity: logoOpacity / 100,
+                          mixBlendMode: blendMode,
+                          filter:
+                            "contrast(" +
+                            (1 - realism * 0.00045) +
+                            ") saturate(" +
+                            (1 - realism * 0.0007) +
+                            ") drop-shadow(0 1px " +
+                            (1 + realism / 80) +
+                            "px rgba(15,23,42," +
+                            realism * 0.002 +
+                            "))",
+                          transform:
+                            "translate(-50%,-50%) rotate(" +
+                            rotation +
+                            "deg) skew(" +
+                            skewX +
+                            "deg," +
+                            skewY +
+                            "deg)",
+                        }}
+                      />
+                    </>
+                  ) : (
+                    <span>LOGO</span>
+                  )}
+                  <small>VISTA PREVIA · NO IMPRIMIR</small>
+                </div>
+              </div>
+            </section>
+            <section className="card">
+              <h2>Historial</h2>
+              <input
+                className="search"
+                placeholder="Buscar propuesta"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              {visibleProposals.map((q) => (
+                <div className="row" key={q.id}>
+                  <div>
+                    <b>{q.product}</b>
+                    <small>{(q.folio || "Cotización") + " · "}</small>
+                    <small>
+                      {q.qty +
+                        " pzas · " +
+                        (q.clientName || "Sin asignar") +
+                        " · " +
+                        (q.placement || "Frente") +
+                        " · v" +
+                        Number(q.version || 1) +
+                        " · $" +
+                        Number(q.total || 0).toFixed(2) +
+                        " · " +
+                        q.status +
+                        " · " +
+                        (q.createdAt
+                          ? new Date(q.createdAt).toLocaleDateString("es-MX")
+                          : "") +
+                        (q.favorite ? " · ★ DESTACADA" : "") +
+                        (proposalGroups[String(q.parentId || q.id)]?.length > 1
+                          ? " · " +
+                            proposalGroups[String(q.parentId || q.id)].length +
+                            " VERSIONES"
+                          : "") +
+                        (needsFollowUp(q) ? " · REQUIERE SEGUIMIENTO" : "")}
+                    </small>
+                  </div>
+                  <div className="actions">
+                    <button onClick={() => loadProposal(q)}>
+                      Abrir en editor
+                    </button>
+                    <button onClick={() => duplicateProposal(q)}>
+                      Duplicar versión
+                    </button>
+                    {q.status === "Borrador" && (
+                      <button
+                        onClick={() => setProposalStatus(q.id, "Enviada")}
+                      >
+                        Marcar enviada
+                      </button>
+                    )}
+                    {q.status === "Enviada" && (
+                      <button
+                        onClick={() =>
+                          setProposalStatus(q.id, "Cambios solicitados")
+                        }
+                      >
+                        Cambios
+                      </button>
+                    )}
+                    {needsFollowUp(q) && (
+                      <button
+                        onClick={() => {
+                          setSelectedClient(String(q.clientId || ""));
+                          setProduct(
+                            products.find(
+                              (p) => String(p.id) === String(q.productId),
+                            ) || product,
+                          );
+                          setQty(q.qty || 1);
+                          setActive("Cotizaciones");
+                          notify("Cotización preparada para seguimiento");
+                        }}
+                      >
+                        Dar seguimiento
+                      </button>
+                    )}
+                    {q.status !== "Aprobado" && (
+                      <button onClick={() => approve(q.id)}>Aprobar</button>
+                    )}
+                    {q.status === "Aprobado" && (
+                      <button onClick={() => makeOrder(q)}>Crear pedido</button>
+                    )}
+                    <button onClick={() => deleteProposal(q.id)}>
+                      Eliminar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </section>
+          </>
+        )}
+        {active === "Cotizaciones" && (
+          <section className="card">
+            <h2>Cotización</h2>
+            <div className="statusfilters">
+              {quoteStatuses.map((v) => (
+                <button
+                  key={v}
+                  className={quoteFilter === v ? "activefilter" : ""}
+                  onClick={() => setQuoteFilter(v)}
+                >
+                  {v}
+                  {v !== "Todos" ? " (" + (statusCounts[v] || 0) + ")" : ""}
+                </button>
+              ))}
+            </div>
+            <div className="quotecontrols">
+              <label>
+                Cantidad
+                <input
+                  type="number"
+                  min="1"
+                  value={qty}
+                  onChange={(e) =>
+                    setQty(Math.max(1, Number(e.target.value) || 1))
+                  }
+                />
+              </label>
+              <label>
+                Descuento %
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={discount}
+                  onChange={(e) =>
+                    setDiscount(
+                      Math.min(100, Math.max(0, Number(e.target.value) || 0)),
+                    )
+                  }
+                />
+              </label>
+            </div>
+            <p>{"Subtotal: $" + subtotal.toFixed(2)}</p>
+            <h3>{"Total: $" + total.toFixed(2) + " MXN"}</h3>
+            <button onClick={share}>Enviar propuesta por WhatsApp</button>
+            <button onClick={emailShare}>Enviar propuesta por correo</button>
+            <button onClick={printQuote}>Cotización + mockup / PDF</button>
+          </section>
+        )}
+        {active === "Pedidos" && (
+          <section className="card">
+            <h2>Pedidos</h2>
+            {orders.length === 0 ? (
+              <p>Aprueba una propuesta para convertirla en pedido.</p>
+            ) : (
+              orders.map((o) => (
+                <div className="row" key={o.id}>
+                  <div>
+                    <b>{o.product}</b>
+                    <small>
+                      {(o.folio || "Pedido") +
+                        " · " +
+                        o.qty +
+                        " pzas · " +
+                        (o.clientName || "Sin asignar") +
+                        " · $" +
+                        Number(o.total || 0).toFixed(2)}
+                    </small>
+                  </div>
+                  <select
+                    disabled={!!o.cloudOrderId}
+                    title={
+                      o.cloudOrderId
+                        ? "El estado real lo controla Producción"
+                        : "Pedido local"
+                    }
+                    value={o.status}
+                    onChange={(e) => changeOrderStatus(o.id, e.target.value)}
+                  >
+                    {["Nuevo", "Producción", "Listo", "Entregado"].map((v) => (
+                      <option
+                        key={v}
+                        disabled={
+                          v !== o.status &&
+                          !allowedOrderTransitions[o.status]?.includes(v)
+                        }
+                      >
+                        {v}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))
+            )}
+          </section>
+        )}
+      </main>
+    </div>
+  );
 }
-function Dashboard({clients,proposals,orders,onNavigate}){const sum=proposals.reduce((a,q)=>a+Number(q.total||0),0),approved=proposals.filter(q=>q.status==='Aprobado').length,pending=proposals.filter(q=>q.status==='Enviada'||q.status==='Cambios solicitados').length,delivered=orders.filter(o=>o.status==='Entregado').length,conversion=proposals.length?Math.round(approved/proposals.length*100):0;return <><section className="premiumHero"><div><small>MOCKUPRO SALES STUDIO</small><h2>Convierte una idea en una propuesta que vende.</h2><p>Diseña, presenta, cotiza y da seguimiento desde un solo espacio.</p></div><div className="heroActions"><button className="primary" onClick={()=>onNavigate('Mockups')}>+ Crear mockup</button><button onClick={()=>onNavigate('Productos')}>Ver catálogo</button></div></section><section className="stats"><div><b>{clients.length}</b><span>Clientes</span></div><div><b>{proposals.length}</b><span>Mockups</span></div><div><b>{'$'+sum.toFixed(0)}</b><span>Cotizado</span></div><div><b>{orders.length}</b><span>Pedidos</span></div></section><section className="grid"><div className="card"><h2>Venta visual</h2><p>Carga el logo, crea una propuesta y cotiza.</p></div><div className="card"><h2>Flujo comercial</h2><p>Cliente → Mockup → Cotización → Aprobación → Pedido</p></div></section><section className="card"><h2>Pulso comercial</h2><div className="pipeline"><button className="pulseaction" onClick={()=>onNavigate('Cotizaciones')}><b>{pending}</b><span>En seguimiento</span><small>Ver cotizaciones →</small></button><div><b>{approved}</b><span>Aprobadas</span></div><div><b>{conversion+"%"}</b><span>Conversión</span></div><div><b>{delivered}</b><span>Entregados</span></div></div></section></>}
+function Dashboard({ clients, proposals, orders, onNavigate }) {
+  const sum = proposals.reduce((a, q) => a + Number(q.total || 0), 0),
+    approved = proposals.filter((q) => q.status === "Aprobado").length,
+    pending = proposals.filter(
+      (q) => q.status === "Enviada" || q.status === "Cambios solicitados",
+    ).length,
+    delivered = orders.filter((o) => o.status === "Entregado").length,
+    conversion = proposals.length
+      ? Math.round((approved / proposals.length) * 100)
+      : 0;
+  return (
+    <>
+      <section className="premiumHero">
+        <div>
+          <small>MOCKUPRO SALES STUDIO</small>
+          <h2>Convierte una idea en una propuesta que vende.</h2>
+          <p>
+            Diseña, presenta, cotiza y da seguimiento desde un solo espacio.
+          </p>
+        </div>
+        <div className="heroActions">
+          <button className="primary" onClick={() => onNavigate("Mockups")}>
+            + Crear mockup
+          </button>
+          <button onClick={() => onNavigate("Productos")}>Ver catálogo</button>
+        </div>
+      </section>
+      <section className="stats">
+        <div>
+          <b>{clients.length}</b>
+          <span>Clientes</span>
+        </div>
+        <div>
+          <b>{proposals.length}</b>
+          <span>Mockups</span>
+        </div>
+        <div>
+          <b>{"$" + sum.toFixed(0)}</b>
+          <span>Cotizado</span>
+        </div>
+        <div>
+          <b>{orders.length}</b>
+          <span>Pedidos</span>
+        </div>
+      </section>
+      <section className="grid">
+        <div className="card">
+          <h2>Venta visual</h2>
+          <p>Carga el logo, crea una propuesta y cotiza.</p>
+        </div>
+        <div className="card">
+          <h2>Flujo comercial</h2>
+          <p>Cliente → Mockup → Cotización → Aprobación → Pedido</p>
+        </div>
+      </section>
+      <section className="card">
+        <h2>Pulso comercial</h2>
+        <div className="pipeline">
+          <button
+            className="pulseaction"
+            onClick={() => onNavigate("Cotizaciones")}
+          >
+            <b>{pending}</b>
+            <span>En seguimiento</span>
+            <small>Ver cotizaciones →</small>
+          </button>
+          <div>
+            <b>{approved}</b>
+            <span>Aprobadas</span>
+          </div>
+          <div>
+            <b>{conversion + "%"}</b>
+            <span>Conversión</span>
+          </div>
+          <div>
+            <b>{delivered}</b>
+            <span>Entregados</span>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
 
